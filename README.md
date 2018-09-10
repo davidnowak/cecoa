@@ -31,12 +31,12 @@ It consists of:
 Cecoa builds with Coq between (at least) v8.6.0 and v8.8.1.
 
 It requires the Coq library
-[BellantoniCook](https://github.com/davidnowak/coq-bellantonicook)
+[BellantoniCook](https://github.com/davidnowak/bellantonicook)
 that provides a formalization in Coq of Bellantoni and Cook’s
 characterization of polytime functions.
 So you will have to download and build that library first.
 Then you can either `make install` it or add to your `COQPATH` the directory
-`path/to/coq-bellantonicook/src`.
+`path/to/bellantonicook/src`.
 
 Then, you can simply run `make` to build this library and the examples.
 
