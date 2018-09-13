@@ -28,6 +28,8 @@ It consists of:
 
 ##  Building
 
+### By hand
+
 Cecoa builds with Coq between (at least) v8.6.0 and v8.8.1.
 
 It requires the Coq library
@@ -39,6 +41,19 @@ Then you can either `make install` it or add to your `COQPATH` the directory
 `path/to/bellantonicook/src`.
 
 Then, you can simply run `make` to build this library and the examples.
+
+### Using [OPAM]
+
+You can also get and install Cecoa using [OPAM] and the
+[coq-released](https://coq.inria.fr/opam/released) repository (see the
+[official documentation](https://coq.inria.fr/opam/www/using.html)):
+
+```
+opam repo add coq-released https://coq.inria.fr/opam/released
+opam install coq-cecoa
+```
+
+[OPAM]: https://opam.ocaml.org/
 
 
 ##  Contents
