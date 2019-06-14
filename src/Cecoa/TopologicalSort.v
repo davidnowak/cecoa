@@ -28,8 +28,8 @@ Fixpoint cycleEntryAux (graph: Graph) (seens: list Element) (elem: Element) (cou
   else match counter with
          | S c => match graphLookup elem graph with
                    | e' :: _ =>
-                     (* cas où elem est bien dans le graphe et a au moins un successeur *)
-                     (* on devrait toujours être dans ce cas quand on utilise la fonction *)
+                     (* elem is in the graph and has at least one successor *)
+                     (* this should always hold when we call the function *)
                      cycleEntryAux graph (elem :: seens) e' c
                    | _ => elem
                  end
@@ -45,11 +45,11 @@ Definition cycleEntry (graph : Graph) : option Element :=
 Fixpoint cycleExtractAux (graph: Graph) (counter: nat) (elem: Element) (cycl: list Element) : list Element :=
   match counter with
     | S c => if bElemIn elem cycl
-            then cycl (* déjà présent dans le cycle, on arrête le parcours sur cette branche *)
+            then cycl (* already in the cycle, we stop the search on that branch*)
             else
               let es := graphLookup elem graph in
                 fold_right (cycleExtractAux graph c) (elem :: cycl) es
-    | _ => cycl (* peut arriver si tous les nœuds sont dans le cycle *)
+    | _ => cycl (* happens only when all the nodes are in the cycle *)
   end.
 
 Definition cycleExtract (graph: Graph): list Element :=
@@ -58,7 +58,6 @@ Definition cycleExtract (graph: Graph): list Element :=
     | Some elem => cycleExtractAux graph (length graph) elem []
   end.
 
-(* Définition utile ? *)
 Definition comp {A B C: Type} (f: B -> C) (g: A -> B) (x: A) := f (g x).
 Definition null {A: Type} (xs: list A) : bool :=
   if xs then true else false.
@@ -93,7 +92,7 @@ Ltac autorank elem_beq ranklist :=
   destruct f;
   match eval compute in (find (fun fr => elem_beq f' (fst fr)) ranklist) with
     | Some (_, ?r) => exact r
-      (* cas des fonctions n’apparaissant pas dans le programme *)
+      (* case of functions that do not appear in the program: no constraint on their ranks *)
     | None         => exact 0
   end.
 

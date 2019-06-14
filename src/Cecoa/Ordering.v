@@ -1,3 +1,4 @@
+(* * Termination Orderings *)
 Require Import Arith NPeano List Bool Psatz.
 Require Import Cecoa.Lib Cecoa.Syntax Cecoa.CBV_cache.
 Require Import Omega.
@@ -17,6 +18,7 @@ Notation pattern := (Syntax.pattern variable constructor).
 Notation rule := (Syntax.rule variable function constructor).
 Notation cbv := (CBV_cache.cbv variable function constructor).
 Notation cache := (CBV_cache.cache variable function constructor).
+Notation "'╎' t '╎'" := (@term_size variable function constructor t) (at level 10).
 
 Variable variable_eq_dec : forall (x1 x2 : variable), {x1=x2}+{x1<>x2}.
 
@@ -33,12 +35,13 @@ Variable max_arity : nat.
 Notation wf :=
   (CBV_cache.wf variable_eq_dec function_eq_dec constructor_eq_dec rule_default prog max_arity).
 
-(* Function ranks and compatibility *)
+(** Rank *)
 
 Variable rank: function -> nat.
 
-(* PPO *)
+(** ** PPO *)
 
+(** Product Extension *)
 Inductive product {A: Type} (R : A -> A -> Prop) : list A -> list A -> Prop :=
 | product_conseq : forall x y xs ys, x = y -> product R xs ys   -> product R (x::xs) (y::ys)
 | product_consst : forall x y xs ys, R x y -> Forall2 (clos_refl R) xs ys -> product R (x::xs) (y::ys).
@@ -261,7 +264,7 @@ Defined.
 Lemma PPO_dec t1 t2: {PPO t1 t2}+{~PPO t1 t2}.
 Proof.
 clear rule_default.
-remember (term_size t1 + term_size t2) as whole_size eqn: H_size.
+remember (╎t1╎ + ╎t2╎) as whole_size eqn: H_size.
 revert t1 t2 H_size.
 induction whole_size as [ whole_size IH ] using lt_wf_rect.
 intros [ x | c lt | f lt ] [ x' | c' lt' | f' lt' ] H_size;
@@ -568,7 +571,6 @@ Definition PPO_prog : Prop :=
 Lemma value_PPO_function (v: value) (f: function) (lt: list term) :
   PPO (@term_from_value _ _ _ v) (fapply f lt).
 Proof.
-  (* c’est juste un paquet de ppo_constr_split pour déconstruire la valeur *)
   induction v using value_ind2.
   simpl.
 
@@ -643,7 +645,7 @@ Qed.
 
 Lemma PPO_trans t1 t2 t3 : PPO t1 t2 -> PPO t2 t3 -> PPO t1 t3.
 Proof.
-remember (term_size t1 + term_size t2 + term_size t3) as whole_size eqn: H_size.
+remember (╎t1╎ + ╎t2╎ + ╎t3╎) as whole_size eqn: H_size.
 revert t1 t2 t3 H_size.
 induction whole_size as [ whole_size IH ] using lt_wf_ind.
 intros t1 t2 t3 H_size H12 H23.
@@ -659,21 +661,21 @@ subst.
 
 - (* ppo_constr_sub *)
   apply ppo_constr_sub with (t:=t3'); trivial.
-  apply IH with (m:= term_size t1 + term_size t2 + term_size t3') (t2 := t2); auto.
+  apply IH with (m:= ╎t1╎ + ╎t2╎ + ╎t3'╎) (t2 := t2); auto.
   apply plus_lt_compat_l.
   apply (in_map (@term_size _ _ _)), in_le_suml in Hin3.
   apply le_lt_n_Sm; trivial.
 
 - (* ppo_fun_sub *)
   apply ppo_fun_sub with (t:=t3'); trivial.
-  apply IH with (m:= term_size t1 + term_size t2 + term_size t3') (t2 := t2); auto.
+  apply IH with (m:= ╎t1╎ + ╎t2╎ + ╎t3'╎) (t2 := t2); auto.
   apply plus_lt_compat_l.
   apply (in_map (@term_size _ _ _)), in_le_suml in Hin3.
   apply le_lt_n_Sm; trivial.
 
 - (* ppo_constr_split *)
   inversion H12 as [ | | Ba t2 Bc Bd Hin2 Hppo12 Bg Bh | | | | ]; subst; auto.
-  apply IH with (m:= term_size t1 + term_size t2 + term_size (fapply f3 lt3)) (t2 := t2); auto.
+  apply IH with (m:= ╎t1╎ + ╎t2╎ + ╎fapply f3 lt3╎) (t2 := t2); auto.
   apply plus_lt_compat_r; apply plus_lt_compat_l.
   apply (in_map (@term_size _ _ _)), in_le_suml in Hin2.
   apply le_lt_n_Sm; trivial.
@@ -685,7 +687,7 @@ subst.
     apply Hppo23; trivial.
 
   + (* ppo_fun_sub *)
-    apply IH with (m:= term_size t1 + term_size t2 + term_size (fapply f3 lt3)) (t2 := t2); auto.
+    apply IH with (m:= ╎t1╎ + ╎t2╎ + ╎fapply f3 lt3╎) (t2 := t2); auto.
     apply plus_lt_compat_r; apply plus_lt_compat_l.
     apply (in_map (@term_size _ _ _)), in_le_suml in Hin2.
     apply le_lt_n_Sm; trivial.
@@ -693,7 +695,7 @@ subst.
   + (* ppo_constr_split *)
     apply ppo_constr_split.
     intros t1 Hin1.
-    apply IH with (m:= term_size t1 + term_size (fapply f2 lt2) + term_size (fapply f3 lt3)) (t2 := fapply f2 lt2);
+    apply IH with (m:= ╎t1╎ + ╎fapply f2 lt2╎ + ╎fapply f3 lt3╎) (t2 := fapply f2 lt2);
     auto.
     do 2 apply plus_lt_compat_r.
     apply (in_map (@term_size _ _ _)), in_le_suml in Hin1.
@@ -702,7 +704,7 @@ subst.
   + (* ppo_funlt_split *)
     apply ppo_funlt_split; try omega.
     intros t1 Hin1.
-    apply IH with (m:= term_size t1 + term_size (fapply f2 lt2) + term_size (fapply f3 lt3)) (t2:=fapply f2 lt2);
+    apply IH with (m:= ╎t1╎ + ╎fapply f2 lt2╎ + ╎fapply f3 lt3╎) (t2:=fapply f2 lt2);
     auto.
     do 2 apply plus_lt_compat_r.
     apply (in_map (@term_size _ _ _)), in_le_suml in Hin1.
@@ -717,7 +719,7 @@ subst.
     apply Forall2_In_l with (x := t1) in Hprodppo12; trivial.
     destruct Hprodppo12 as ( t2 & Hin2 & [ Hppo12 | Heq12 ] ).
 
-    * apply IH with (m:= term_size t1 + term_size t2 + term_size (fapply f3 lt3)) (t2 := t2); eauto.
+    * apply IH with (m:= ╎t1╎ + ╎t2╎ + ╎fapply f3 lt3╎) (t2 := t2); eauto.
       apply plus_lt_compat_r.
       apply (in_map (@term_size _ _ _)), in_le_suml in Hin1.
       apply (in_map (@term_size _ _ _)), in_le_suml in Hin2.
@@ -746,7 +748,7 @@ subst.
     destruct Hprodppo23 as (t3 & Hin3 & [ Hppo23 | Heq23 ] ).
 
     * apply ppo_fun_sub with (t := t3); trivial.
-      apply IH with (m := term_size t1 + term_size t2 + term_size t3) (t2 := t2); trivial.
+      apply IH with (m := ╎t1╎ + ╎t2╎ + term_size t3) (t2 := t2); trivial.
       apply (in_map (@term_size _ _ _)), in_le_suml in Hin2.
       apply (in_map (@term_size _ _ _)), in_le_suml in Hin3.
       simpl.
@@ -758,7 +760,7 @@ subst.
   + (* ppo_constr_split *)
     apply ppo_constr_split.
     intros t1 Hin1.
-    apply IH with (m := term_size t1 + term_size (fapply f2 lt2) + term_size (fapply f3 lt3)) (t2 := fapply f2 lt2);
+    apply IH with (m := ╎t1╎ + ╎fapply f2 lt2╎ + ╎fapply f3 lt3╎) (t2 := fapply f2 lt2);
     trivial.
 
     * do 2 apply plus_lt_compat_r.
@@ -773,7 +775,7 @@ subst.
   + (* ppo_funlt_split *)
     apply ppo_funlt_split; try omega.
     intros t1 Hin1.
-    apply IH with (m := term_size t1 + term_size (fapply f2 lt2) + term_size (fapply f3 lt3)) (t2 := fapply f2 lt2);
+    apply IH with (m := ╎t1╎ + ╎fapply f2 lt2╎ + ╎fapply f3 lt3╎) (t2 := fapply f2 lt2);
     trivial.
 
     * do 2 apply plus_lt_compat_r.
@@ -786,11 +788,10 @@ subst.
       trivial.
 
   + (* ppo_funeqv_split *)
-    (* Il s’agit de prouver ici que product PPO est transitif. *)
     apply ppo_funeqv_split; try congruence.
     apply product_trans with (lt2 := lt2); trivial.
     intros t1 t2 t3 Hin1 Hin2 Hin3 Hppo12 Hppo23.
-    apply IH with (t2 := t2) (m := term_size t1 + term_size t2 + term_size t3); trivial.
+    apply IH with (t2 := t2) (m := ╎t1╎ + ╎t2╎ + term_size t3); trivial.
     apply (in_map (@term_size _ _ _)), in_le_suml in Hin1.
     apply (in_map (@term_size _ _ _)), in_le_suml in Hin2.
     apply (in_map (@term_size _ _ _)), in_le_suml in Hin3.
@@ -817,7 +818,7 @@ Qed.
 
 Lemma PPO_asym t1 t2 : PPO t1 t2 -> ~ PPO t2 t1.
 Proof.
-remember (term_size t1 + term_size t2) as whole_size eqn: H_size.
+remember (╎t1╎ + ╎t2╎) as whole_size eqn: H_size.
 revert t1 t2 H_size.
 induction whole_size as [ whole_size IH ] using lt_wf_ind.
 intros t1 t2 H_size Hppo12 Hppo21.
@@ -834,7 +835,7 @@ destruct t1 as [ x | c lt | f lt ].
       intro Hppo11.
       generalize Hppo11.
       intro Hppo11'.
-      apply IH with (m := term_size (capply c lt) + term_size (capply c lt)) in Hppo11; try tauto.
+      apply IH with (m := ╎capply c lt╎ + ╎capply c lt╎) in Hppo11; try tauto.
       apply plus_lt_compat_l.
       apply in_capply_term_size_lt; trivial.
 
@@ -842,7 +843,7 @@ destruct t1 as [ x | c lt | f lt ].
       intro Hppo11.
       generalize Hppo11.
       intro Hppo11'.
-      apply IH with (m := term_size (capply c lt) + term_size (capply c lt)) in Hppo11; try tauto.
+      apply IH with (m := ╎capply c lt╎ + ╎capply c lt╎) in Hppo11; try tauto.
       apply plus_lt_compat_l.
       apply in_fapply_term_size_lt; trivial.
 
@@ -851,7 +852,7 @@ destruct t1 as [ x | c lt | f lt ].
         eapply ppo_constr_in.
         exact Hin3.
       }
-      eapply IH with (m := term_size (capply c lt) + term_size t3) in Hppo; try tauto; try ring.
+      eapply IH with (m := ╎capply c lt╎ + term_size t3) in Hppo; try tauto; try ring.
       apply plus_lt_compat_l.
       apply in_capply_term_size_lt; trivial.
 
@@ -860,14 +861,14 @@ destruct t1 as [ x | c lt | f lt ].
         eapply ppo_fun_in.
         exact Hin3.
       }
-      eapply IH with (m := term_size (capply c lt) + term_size t3) in Hppo; try tauto; try ring.
+      eapply IH with (m := ╎capply c lt╎ + term_size t3) in Hppo; try tauto; try ring.
       apply plus_lt_compat_l.
       apply in_fapply_term_size_lt; trivial.
 
     * generalize Hin.
       intro Hin'.
       apply Hall in Hin.
-      {apply IH with (m := term_size (fapply f3 lt3) + term_size (fapply f3 lt3)) in Hin; trivial.
+      {apply IH with (m := ╎fapply f3 lt3╎ + ╎fapply f3 lt3╎) in Hin; trivial.
 
       - assert (PPO (fapply f3 lt3) (fapply f3 lt3)) as H. {
         apply PPO_trans with (capply c lt); trivial.
@@ -884,7 +885,7 @@ destruct t1 as [ x | c lt | f lt ].
       intro Hppo11.
       generalize Hppo11.
       intro Hppo11'.
-      apply IH with (m := term_size (capply c lt) + term_size (capply c lt)) in Hppo11; try tauto.
+      apply IH with (m := ╎capply c lt╎ + ╎capply c lt╎) in Hppo11; try tauto.
       apply plus_lt_compat_l.
       apply in_capply_term_size_lt; trivial.
 
@@ -892,7 +893,7 @@ destruct t1 as [ x | c lt | f lt ].
       intro Hppo11.
       generalize Hppo11.
       intro Hppo11'.
-      apply IH with (m := term_size (capply c lt) + term_size (capply c lt)) in Hppo11; try tauto.
+      apply IH with (m := ╎capply c lt╎ + ╎capply c lt╎) in Hppo11; try tauto.
       apply plus_lt_compat_l.
       apply in_fapply_term_size_lt; trivial.
 
@@ -901,7 +902,7 @@ destruct t1 as [ x | c lt | f lt ].
         eapply ppo_constr_in.
         exact Hin3.
       }
-      apply IH with (m := term_size (capply c lt) + term_size t3) in Hppo'; try tauto; try ring.
+      apply IH with (m := ╎capply c lt╎ + term_size t3) in Hppo'; try tauto; try ring.
       apply plus_lt_compat_l.
       apply in_capply_term_size_lt; trivial.
 
@@ -910,14 +911,14 @@ destruct t1 as [ x | c lt | f lt ].
         eapply ppo_fun_in.
         exact Hin3.
       }
-      apply IH with (m := term_size (capply c lt) + term_size t3) in Hppo'; try tauto; try ring.
+      apply IH with (m := ╎capply c lt╎ + term_size t3) in Hppo'; try tauto; try ring.
       apply plus_lt_compat_l.
       apply in_fapply_term_size_lt; trivial.
 
     * generalize Hin.
       intro Hin'.
       apply Hall in Hin.
-      apply IH with (m := term_size t + term_size (fapply f3 lt3)) in Hin; trivial; try tauto.
+      apply IH with (m := term_size t + ╎fapply f3 lt3╎) in Hin; trivial; try tauto.
       apply plus_lt_compat_r.
       apply in_capply_term_size_lt; trivial.
 
@@ -928,7 +929,7 @@ destruct t1 as [ x | c lt | f lt ].
     intro Hppo11.
     generalize Hppo11.
     intro Hppo11'.
-    apply IH with (m := term_size t2 + term_size t2) in Hppo11; try tauto.
+    apply IH with (m := ╎t2╎ + ╎t2╎) in Hppo11; try tauto.
     apply plus_lt_compat_r.
     apply in_fapply_term_size_lt; trivial.
 
@@ -947,7 +948,7 @@ destruct t1 as [ x | c lt | f lt ].
       intro Hppo11.
       generalize Hppo11.
       intro Hppo11'.
-      apply IH with (m := term_size (fapply f lt) + term_size (fapply f lt)) in Hppo11; try tauto.
+      apply IH with (m := ╎fapply f lt╎ + ╎fapply f lt╎) in Hppo11; try tauto.
       apply plus_lt_compat_l.
       apply in_capply_term_size_lt; trivial.
 
@@ -956,7 +957,7 @@ destruct t1 as [ x | c lt | f lt ].
       apply ppo_constr_in with (c := c3) in Hin.
       generalize (PPO_trans Hin Hppo21).
       intro Hppo31.
-      apply IH with (m := term_size (fapply f lt) + term_size t3)in Hppo31;
+      apply IH with (m := ╎fapply f lt╎ + term_size t3)in Hppo31;
        try tauto; try ring.
       apply plus_lt_compat_l.
       apply in_capply_term_size_lt; trivial.
@@ -967,7 +968,7 @@ destruct t1 as [ x | c lt | f lt ].
       intro Hppo11.
       generalize Hppo11.
       intro Hppo11'.
-      apply IH with (m := term_size (fapply f lt) + term_size (fapply f lt)) in Hppo11; try tauto.
+      apply IH with (m := ╎fapply f lt╎ + ╎fapply f lt╎) in Hppo11; try tauto.
       apply plus_lt_compat_l.
       apply in_fapply_term_size_lt; trivial.
 
@@ -976,7 +977,7 @@ destruct t1 as [ x | c lt | f lt ].
       apply ppo_fun_in with (f := f3) in Hin.
       generalize (PPO_trans Hin Hppo21).
       intro Hppo31.
-      apply IH with (m := term_size (fapply f lt) + term_size t3)in Hppo31;
+      apply IH with (m := ╎fapply f lt╎ + term_size t3)in Hppo31;
        try tauto; try ring.
       apply plus_lt_compat_l.
       apply in_fapply_term_size_lt; trivial.
@@ -988,7 +989,7 @@ destruct t1 as [ x | c lt | f lt ].
       intro Hppo11.
       generalize Hppo11.
       intro Hppo11'.
-      apply IH with (m := term_size (fapply f lt) + term_size (fapply f lt)) in Hppo11; try tauto.
+      apply IH with (m := ╎fapply f lt╎ + ╎fapply f lt╎) in Hppo11; try tauto.
       apply plus_lt_compat_l.
       apply in_fapply_term_size_lt; trivial.
 
@@ -997,7 +998,7 @@ destruct t1 as [ x | c lt | f lt ].
       apply ppo_fun_in with (f := f3) in Hin.
       generalize (PPO_trans Hin Hppo21).
       intro Hppo31.
-      apply IH with (m := term_size (fapply f lt) + term_size t3)in Hppo31;
+      apply IH with (m := ╎fapply f lt╎ + term_size t3)in Hppo31;
        try tauto; try ring.
       apply plus_lt_compat_l.
       apply in_fapply_term_size_lt; trivial.
@@ -1015,7 +1016,7 @@ destruct t1 as [ x | c lt | f lt ].
 
       { destruct Hppoeqi as [ Hpporevi | Hppoeqi ].
 
-        - apply IH with (m := term_size (nth i lt3 term_default) + term_size (nth i lt term_default)) in Hppoi; trivial; try tauto.
+        - apply IH with (m := ╎nth i lt3 term_default╎ + ╎nth i lt term_default╎) in Hppoi; trivial; try tauto.
           rewrite plus_comm.
           apply plus_lt_compat.
 
@@ -1026,7 +1027,7 @@ destruct t1 as [ x | c lt | f lt ].
             apply nth_In; trivial.
 
         - generalize Hppoi; intros Hppoibis.
-          apply IH with (m := term_size (nth i lt3 term_default) + term_size (nth i lt term_default)) in Hppoi; trivial.
+          apply IH with (m := ╎nth i lt3 term_default╎ + ╎nth i lt term_default╎) in Hppoi; trivial.
 
           + rewrite Hppoeqi in Hppoi, Hppoibis.
             tauto.
@@ -1123,6 +1124,9 @@ Proof.
     assumption.
 Qed.
 
+(** ** Bound by rank *)
+
+(** Lemma 56 *)
 Lemma PPO_rule_PPO_instance s f lp t :
   PPO_rule (rule_intro f lp t) ->
   PPO (subst s t) (fapply f (map (@term_from_value _ _ _) (map (psubst s) lp))).
@@ -1279,12 +1283,12 @@ Qed.
 Lemma PPO_activation_le_rank f1 lt1 f2 lv2 :
   PPO (fapply f1 lt1) (fapply f2 (map (@term_from_value _ _ _) lv2)) -> rank f1 <= rank f2.
 Proof.
-  remember (term_size (fapply f1 lt1) + term_size (fapply f2 (map (@term_from_value variable function constructor) lv2))) as whole_size eqn: Hsize.
+  remember (╎fapply f1 lt1╎ + ╎fapply f2 (map (@term_from_value variable function constructor) lv2)╎) as whole_size eqn: Hsize.
   revert f1 lt1 f2 lv2 Hsize.
   induction whole_size as [ whole_size IH ] using lt_wf_ind.
   intros f1 lt1 f2 lv2 Hsize Hppo.
   inversion Hppo as [ | Ba Bb Bc Hin Be Bf | | Ba v Bc Bd Hin Hpposub Bh Bi | | | ]; subst.
-  - (* Impossible car les lt2 sont des valeurs *)
+  - (* absurd since lt2 are values *)
     apply in_map_iff in Hin; destruct Hin as (v & Heqv & Hv).
     contradict Heqv; apply term_from_value_not_fapply.
 
@@ -1294,19 +1298,19 @@ Proof.
     apply term_value_eqv; eauto.
 
   - apply lt_le_weak; assumption.
-  
+
   - apply le_lt_or_eq_iff; right; assumption.
 Qed.
 
 Lemma PPO_pattern_le_rank f1 lt1 f2 lp2 :
   PPO (fapply f1 lt1) (fapply f2 (map (@term_from_pattern _ _ _) lp2)) -> rank f1 <= rank f2.
 Proof.
-  remember (term_size (fapply f1 lt1) + term_size (fapply f2 (map (@term_from_pattern variable function constructor) lp2))) as whole_size eqn: Hsize.
+  remember (╎fapply f1 lt1╎ + ╎fapply f2 (map (@term_from_pattern variable function constructor) lp2)╎) as whole_size eqn: Hsize.
   revert f1 lt1 f2 lp2 Hsize.
   induction whole_size as [ whole_size IH ] using lt_wf_ind.
   intros f1 lt1 f2 lv2 Hsize Hppo.
   inversion Hppo as [ | Ba Bb Bc Hin Be Bf | | Ba v Bc Bd Hin Hpposub Bh Bi | | | ]; subst.
-  - (* Impossible car les lt2 sont des valeurs *)
+  - (* absurd since lt2 are values *)
     apply in_map_iff in Hin; destruct Hin as (v & Heqv & Hv).
     contradict Heqv. apply term_from_pattern_not_fapply.
 
@@ -1315,17 +1319,17 @@ Proof.
     contradict Hpposub; apply fapply_not_PPO_pattern.
 
   - apply lt_le_weak; assumption.
-  
+
   - apply le_lt_or_eq_iff; right; assumption.
 Qed.
 
 Lemma subfapplies_activation_le_rank i s p c1 f lt c2 v f' lt' :
-  let proof_tree := cbv_update i s p c1 (fapply f lt) c2 v in
-  PPO_prog -> wf proof_tree ->
+  let π := cbv_update i s p c1 (fapply f lt) c2 v in
+  PPO_prog -> wf π ->
   In (fapply f' lt') (fapplies_in_term (proj_left p)) ->
   rank f' <= rank f.
 Proof.
-  intros proof_tree Hppoprog Hwf Hin.
+  intros π Hppoprog Hwf Hin.
   assert (PPO (fapply f' lt') (fapply f lt)) as Hppo.
   - apply PPO_trans_eq with (t2 := proj_left p).
     + apply fapplies_rec_PPO.
@@ -1335,7 +1339,7 @@ Proof.
   - assert (Hltval : Forall (@term_value _ _ _) lt).
     {
       destruct Hwf as (_ & lp & _ & _ & _ & Heqlt & _ & _ & _ & _ & _ & _ & _).
-      clear i p c1 f c2 v f' lt' proof_tree Hppoprog Hin Hppo.
+      clear i p c1 f c2 v f' lt' π Hppoprog Hin Hppo.
       revert lp Heqlt;
         induction lt as [ | t lt IH ]; intros lp Heqlt;
         constructor;
@@ -1352,15 +1356,15 @@ Proof.
         injection Heqlt; intros; assumption.
     }
 
-    clear i s p c1 c2 v proof_tree Hppoprog Hwf Hin.
+    clear i s p c1 c2 v π Hppoprog Hwf Hin.
     inversion Hppo as [ | | | Ba t Bc Bd Hin Hppot Bg Bh | | | ]; subst.
 
-    + (* ppo_fun_in : absurde *)
+    + (* ppo_fun_in: absurd *)
       assert (Himp : term_value (fapply f' lt')).
       { apply Forall_In_l with (xs := lt); assumption. }
       inversion Himp.
 
-    + (* ppo_fun_sub : absurde *)
+    + (* ppo_fun_sub: absurd *)
       exfalso.
       generalize Hppot.
       apply fapply_not_PPO_value.
@@ -1374,12 +1378,12 @@ Proof.
 Qed.
 
 Lemma le_rank_first_activation i s p c1 t c2 v p' :
-  let proof_tree := cbv_update i s p c1 t c2 v in
-  PPO_prog -> wf proof_tree ->
-  In p' (first_activations proof_tree) ->
-  activation_rank p' <= activation_rank proof_tree.
+  let π := cbv_update i s p c1 t c2 v in
+  PPO_prog -> wf π ->
+  In p' (first_activations π) ->
+  activation_rank p' <= activation_rank π.
 Proof.
-  intros proof_tree Hppoprog Hwf Hinfst.
+  intros π Hppoprog Hwf Hinfst.
   apply incl_first_activations_semi in Hinfst.
   generalize Hwf; intros Hfor2.
   apply first_activations_residues_activation in Hfor2; trivial.
@@ -1391,8 +1395,8 @@ Proof.
   transitivity (rank f').
   - subst.
     assert (wf p') as Hwfp'. {
-      apply wf_InCBV_wf with (proof_tree := proof_tree); try assumption.
-        apply InCBV_In_sub_trees, first_activations_and_semi_incl_sub_trees; assumption.
+      apply wf_InCBV_wf with (π := π); try assumption.
+        apply InCBV_In_ℐ, first_activations_and_semi_incl_ℐ; assumption.
     }
     destruct p' as [ | | i' s' p'' c1' t'' c2' v'' | ] ; simpl; try apply le_0_n.
     simpl in *.
@@ -1407,13 +1411,13 @@ Proof.
 Qed.
 
 Lemma PPO_first_activations i s p c1 t c2 v p' :
-  let proof_tree := cbv_update i s p c1 t c2 v in
-  PPO_prog -> wf proof_tree ->
-  In p' (first_activations proof_tree) ->
-  PPO (proj_left p') (proj_left proof_tree).
+  let π := cbv_update i s p c1 t c2 v in
+  PPO_prog -> wf π ->
+  In p' (first_activations π) ->
+  PPO (proj_left p') (proj_left π).
 Proof.
-  intros proof_tree.
-  unfold proof_tree.
+  intros π.
+  unfold π.
   intros H_ppo H_wf H_p'.
   destruct t as [ | | f lv ]; try (simpl in H_wf; tauto).
   simpl.
@@ -1421,9 +1425,9 @@ Proof.
   intros H_rank; apply le_rank_first_activation in H_rank; trivial.
   apply le_lt_or_eq in H_rank.
   assert ( exists f' lv', proj_left p' = fapply f' lv' ) as H_p'_fapply.
-  { apply first_activations_incl_activations in H_p'.
+  { apply first_activations_incl_ℐᵃ in H_p'.
     generalize H_p'; intros Hwfp'.
-    apply (activations_wf H_wf) in Hwfp'.
+    apply (ℐᵃ_wf H_wf) in Hwfp'.
     apply activation_is_function in H_p'.
     destruct H_p' as (i' & s' & p'' & c1' & t' & c2' & v' & Heqp').
     subst p'; simpl.
@@ -1437,7 +1441,7 @@ Proof.
 
   destruct H_rank as [ H_rank | H_rank ].
 
-  - apply first_activations_incl_activations in H_p'.
+  - apply first_activations_incl_ℐᵃ in H_p'.
     destruct p' as [ | | i' s' p'' c1' t' c2' v'| ];
       try (apply activation_is_function in H_p';
            repeat match goal with
@@ -1449,7 +1453,7 @@ Proof.
     apply ppo_funlt_split; trivial.
     intros v'' Hin.
     generalize H_p'; intros Hwfp'.
-    apply (activations_wf H_wf) in Hwfp'.
+    apply (ℐᵃ_wf H_wf) in Hwfp'.
     destruct Hwfp' as (_ & lp & _ & _ & _ & Heqlv' & _).
     subst lv'.
     apply in_map_iff in Hin; destruct Hin as (v''' & Heqv'' & Hin).
@@ -1466,9 +1470,9 @@ Proof.
     destruct t as [ | | f'' lt ]; try tauto.
     destruct Hresidues as [ Heqf Hlooklt ]; subst f''.
     generalize H_p'; intros Hactp';
-    apply first_activations_incl_activations in Hactp'.
+    apply first_activations_incl_ℐᵃ in Hactp'.
     generalize Hactp'; intros Hwfp';
-    apply (@activations_wf _ _ _ _ _ _ _ _ _ _ _ H_wf) in Hwfp'.
+    apply (@ℐᵃ_wf _ _ _ _ _ _ _ _ _ _ _ H_wf) in Hwfp'.
     apply activation_is_function in Hactp'.
     destruct Hactp' as ( i' & s' & p'' & c1' & t' & c2' & v' & Heqp' ).
     subst p'.
@@ -1488,7 +1492,7 @@ Proof.
     {
       simpl in H_wf.
       destruct H_wf as (_ & lp & _ & _ & _ & Hlvval & _).
-      clear i p c1 c2 v proof_tree H_ppo lv' Hin i' s' p'' c1' c2' v' H_p' Hlooklt Hwfp'.
+      clear i p c1 c2 v π H_ppo lv' Hin i' s' p'' c1' c2' v' H_p' Hlooklt Hwfp'.
       inversion Hppofapp as [ | Ba Bb Bc Hinval | | Ba v Bc Bd Hin Hppoval Bg Bh | | Ba Bb Bc Bd Hranklt Bf Bg Bh | Ba Bb Bc Bd Be Hprodppo Bg Bh];
         subst.
 
@@ -1541,18 +1545,18 @@ Proof.
     + apply IH; [ inversion Hltval | idtac ]; assumption.
 Qed.
 
-Lemma PPO_activations i s p c1 t c2 v p' :
-  let proof_tree := cbv_update i s p c1 t c2 v in
-  PPO_prog -> wf proof_tree ->
-  In p' (activations proof_tree) ->
-  p' = proof_tree \/ PPO (proj_left p') (proj_left proof_tree).
+Lemma PPO_ℐᵃ i s p c1 t c2 v p' :
+  let π := cbv_update i s p c1 t c2 v in
+  PPO_prog -> wf π ->
+  In p' (ℐᵃ π) ->
+  p' = π \/ PPO (proj_left p') (proj_left π).
 Proof.
   revert p'.
   apply cbv_big_induction; try tauto.
   clear i s p c1 t c2 v.
-  intros i s p c1 t c2 v Hbig p' proof_tree Hppoprg Hwf Hin.
-  unfold proof_tree in Hin;
-    rewrite -> activations_first_activations in Hin.
+  intros i s p c1 t c2 v Hbig p' π Hppoprg Hwf Hin.
+  unfold π in Hin;
+    rewrite -> ℐᵃ_first_activations in Hin.
   apply in_inv in Hin.
   destruct Hin as [ Heq | Hin ]; [ left; symmetry; assumption | right ].
   apply in_flat_map in Hin.
@@ -1566,8 +1570,8 @@ Proof.
   }
   apply Hgen; clear Hgen.
   apply Hbig; try assumption.
-  apply activations_wf with (proof_tree := proof_tree); try assumption.
-  apply first_activations_incl_activations; assumption.
+  apply ℐᵃ_wf with (π := π); try assumption.
+  apply first_activations_incl_ℐᵃ; assumption.
 Qed.
 
 End Ordering.
@@ -1643,7 +1647,7 @@ inversion Hppo; subst.
   + intros. apply H0. simpl. right. rewrite in_flat_map.
     exists t0. auto.
 - apply ppo_constr_split. intros.
-  apply IH with (m:=term_size s + term_size (fapply f lt)); auto.
+  apply IH with (m:= term_size s + term_size(fapply f lt)); auto.
   + apply plus_lt_compat_r.
     apply (in_map (@term_size _ _ _)), in_le_suml in H2.
     apply le_lt_n_Sm; auto.
@@ -1654,7 +1658,7 @@ inversion Hppo; subst.
     * trivial.
     * apply H0. simpl. auto.
     * apply H. simpl. auto.
-  + intros. apply IH with (m:=term_size s + term_size (fapply f lt)); auto.
+  + intros. apply IH with (m:=term_size s + term_size(fapply f lt)); auto.
     * apply plus_lt_compat_r.
       apply (in_map (@term_size _ _ _)), in_le_suml in H3.
       apply le_lt_n_Sm; auto.

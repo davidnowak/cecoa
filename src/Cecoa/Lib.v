@@ -1,3 +1,4 @@
+(** * Utilities library *)
 Require Import Bool Arith Max Omega Psatz List NPeano Permutation.
 Import List.ListNotations.
 
@@ -9,7 +10,7 @@ Notation "x ≤ y < z" := (x ≤ y ∧ y < z) (at level 70, y at next level).
 
 Infix "∈" := In (at level 70).
 
-(* Compatibilité 8.4 *)
+(* Coq 8.4 compatibility *)
 Infix "=?" := beq_nat (at level 70, no associativity).
 
 Obligation Tactic := idtac.
@@ -41,7 +42,7 @@ Lemma forall_impl_and {A:Type} (R:A→Prop) (P Q:A→Prop):
   ((∀ x, R x → P x) ∧ (∀ x, R x → Q x)).
 Proof. intuition; now apply H. Qed.
 Lemma forall_impl2_and {A B:Type} (P Q R : A → B → Prop):
-  (∀ x y, R x y → P x y ∧ Q x y) ↔ 
+  (∀ x y, R x y → P x y ∧ Q x y) ↔
   ((∀ x y, R x y → P x y) ∧ (∀ x y, R x y → Q x y)).
 Proof. intuition; now apply H. Qed.
 
@@ -364,7 +365,7 @@ intro Heq.
 induction l.
 - trivial.
 
-- simpl. 
+- simpl.
   rewrite Heq; [| left; trivial].
   case (g a); rewrite IHl; trivial; intro b; auto with *.
 Qed.
@@ -389,7 +390,7 @@ induction l.
   trivial.
 Qed.
 
-Lemma flat_map_in_ext  A B (f g : A -> list B) l : 
+Lemma flat_map_in_ext  A B (f g : A -> list B) l :
   (forall a : A, In a l -> f a = g a) -> flat_map f l = flat_map g l.
 Proof.
 induction l; intro Heq.
@@ -398,11 +399,11 @@ induction l; intro Heq.
 - simpl.
   rewrite Heq, IHl.
   + trivial.
-  
+
   + intros.
     apply Heq.
     right; trivial.
-    
+
   + left; trivial.
 Qed.
 
@@ -472,11 +473,11 @@ Proof.
     destruct Hyl2 as [H1 | [Hx | H2]].
     + apply in_or_app.
       left; assumption.
-    
+
     + elim Hnin.
       subst x.
-      assumption. 
-    
+      assumption.
+
     + apply in_or_app.
       right; assumption.
 Qed.
@@ -969,9 +970,9 @@ Lemma suml_le_len_times_bound l b :
   (forall x, In x l -> x <= b) -> suml l <= length l * b.
 Proof.
 induction l as [ | x' l' IH ].
-- (* liste vide *)
+- (* empty list *)
   trivial.
-- (* liste non vide *)
+- (* non-empty list *)
   intro H.
   simpl.
   apply plus_le_compat.
@@ -1034,7 +1035,7 @@ Qed.
 Lemma suml_map_mult_le_suml_mult_maxl (A : Type) f g (l : list A) :
   suml (map (fun x => f x * g x) l) <= suml (map f l) * maxl (map g l).
 Proof.
-induction l as [ | x l IH]; trivial. 
+induction l as [ | x l IH]; trivial.
 simpl.
 etransitivity.
 - apply plus_le_compat_l.
@@ -1048,7 +1049,7 @@ Qed.
 Lemma suml_map_mult_le_suml_mult_suml (A : Type) f g (l : list A) :
   suml (map (fun x => f x * g x) l) <= suml (map f l) * suml (map g l).
 Proof.
-induction l as [ | x l IH]; trivial. 
+induction l as [ | x l IH]; trivial.
 simpl.
 etransitivity.
 - apply plus_le_compat_l.
@@ -1087,7 +1088,7 @@ induction l.
     apply Permutation_cons_app; trivial.
 Qed.
 
-Lemma filter_compose {A : Type} f g (l : list A) : 
+Lemma filter_compose {A : Type} f g (l : list A) :
   (forall x, In x l -> ( f x = true -> g x = true)) ->
   filter f (filter g l) = filter f l.
 Proof.
@@ -1104,7 +1105,7 @@ induction l; intro H.
     * simpl. rewrite HH, IHl; auto with *.
 Qed.
 
-(* dans 8.5 *)
+(* In 8.5 *)
 Lemma in_seq : forall len start n : nat,
        In n (seq start len) <-> start <= n < start + len.
 Proof.
@@ -1139,7 +1140,7 @@ revert b l; induction n; intros b l Hlt.
 
   + apply Permutation_app.
     * trivial.
-    * replace  (flat_map (fun n : nat => filter (beq_nat n) l) (seq (S b) n)) with 
+    * replace  (flat_map (fun n : nat => filter (beq_nat n) l) (seq (S b) n)) with
             ((flat_map (fun n : nat => filter (beq_nat n) (filter (fun x : nat => negb (beq_nat b x)) l)) (seq (S b) n))).
        apply IHn.
        intros x Hx.
@@ -1186,7 +1187,7 @@ Fixpoint prodl (l : list nat) : nat :=
   | n :: l' => n * prodl l'
   end.
 
-Lemma prodl_bound (l : list nat) (b : nat) : 
+Lemma prodl_bound (l : list nat) (b : nat) :
   (forall x, In x l -> x <= b) -> prodl l <= Nat.pow b  (length l).
 Proof.
 induction l; intro Hb.
@@ -1294,7 +1295,7 @@ induction l.
 - simpl;auto.
 - simpl.
   apply Forall2_cons.
-  + apply H;simpl;auto.    
+  + apply H;simpl;auto.
   + apply IHl.
     intros.
     apply H.
@@ -1322,7 +1323,7 @@ Proof.
 revert ys.
 induction xs as [ | x xs IH ]; simpl; intros ys H1 i H2; try omega.
 destruct ys as [ | y ys ]; try solve[inversion H1].
-destruct i as [ | i ]; simpl; inversion H1; trivial; auto with *. 
+destruct i as [ | i ]; simpl; inversion H1; trivial; auto with *.
 Qed.
 
 Inductive Exists2 {A B} (R: A -> B -> Prop) : list A -> list B -> Prop :=
@@ -1668,7 +1669,7 @@ Qed.
 Theorem NoDup_cons_iff {A:Type} (a: A) (l: list A):
   NoDup (a::l) <-> ~ In a l /\ NoDup l.
 Proof.
-(* Prouvé dans stdlib 8.5 *)
+(* In 8.5 *)
 split; intro H.
 - inversion H; tauto.
 - constructor; tauto.
@@ -1691,7 +1692,7 @@ revert l'; induction l; intros l' H x Hin.
   + apply IHl; assumption.
 Qed.
 
-(* dans la lib standard de coq 8.5 *)
+(* In 8.5 *)
 Lemma NoDup_Permutation_NoDup A l l' : @NoDup A l -> Permutation.Permutation l l' -> NoDup l'.
 Proof.
   intros NDl Hperm.
@@ -1782,7 +1783,7 @@ Qed.
 
 End NoDup.
 
-(* version dans Set de ListDec.uniquify *)
+(* Set variant of ListDec.uniquify *)
 Definition uniquify A (d : forall a b : A, { a = b} + { a <> b}) (l:list A) : list A :=
 list_rect (fun _ : list A => list A) []
   (fun (a : A) (_ l' : list A) => let s := in_dec d a l' in if s then l' else a :: l') l.
@@ -1863,7 +1864,7 @@ induction l2; intro H.
 Qed.
 
 Lemma sublist_app_compat A (l1 l2 l3 l4 : list A) :
-  sublist l1 l3 -> 
+  sublist l1 l3 ->
   sublist l2 l4 ->
   sublist (l1 ++ l2) (l3 ++ l4).
 Proof.
@@ -1873,7 +1874,7 @@ intros H13 H14; induction H13; simpl.
 - apply sublist_cons; trivial.
 Qed.
 
-Lemma sublist_flatmap_in_ext A B (f : A -> list B) g l: 
+Lemma sublist_flatmap_in_ext A B (f : A -> list B) g l:
   (forall x : A , In x l -> sublist (f x) (g x)) ->
   sublist (flat_map f l) (flat_map g l).
 Proof.
@@ -1896,7 +1897,7 @@ Qed.
 
 End Sublist.
 
-(* lemmes de compatibilité présents dans coq 8.5 *)
+(* Compatibility lemmas, included in 8.5 *)
 Section Compat.
 
 Lemma NoDup_map_inv A B (f:A->B) l : NoDup (map f l) -> NoDup l.
@@ -1982,7 +1983,7 @@ intros [a b].
 apply acc_lex; trivial.
 Qed.
 
-Definition lex_prod_dec: 
+Definition lex_prod_dec:
   (forall a1 a2 : A, {a1 = a2} + {a1 <> a2}) ->
   (forall a1 a2, {ltA a1 a2} + {~ltA a1 a2}) ->
   (forall b1 b2, {ltB b1 b2} + {~ltB b1 b2}) ->
@@ -2026,7 +2027,7 @@ Proof. simpl. auto. Qed.
 
 Lemma cons_last (A:Type) (a:A) l x:
   last (a::l) x = last l a.
-Proof. 
+Proof.
 destruct l; try now simpl. rewrite cons_cons_last. apply non_empty_last. discriminate.
 Qed.
 
@@ -2050,7 +2051,7 @@ auto with *.
 Qed.
 
 Section Firstn_skipn.
-Lemma firstn_map {A B : Type} (f : A -> B) l n : 
+Lemma firstn_map {A B : Type} (f : A -> B) l n :
   firstn n (map f l) = map f (firstn n l).
 Proof.
 revert l.
@@ -2058,7 +2059,7 @@ induction n; simpl; trivial.
 destruct l; simpl; trivial; now rewrite IHn.
 Qed.
 
-Lemma skipn_map {A B : Type} (f : A -> B) l n : 
+Lemma skipn_map {A B : Type} (f : A -> B) l n :
   skipn n (map f l) = map f (skipn n l).
 Proof.
 revert l.
@@ -2123,14 +2124,14 @@ Lemma skipn_app2 {A : Type} (l l' : list A) n:
   length l = n → skipn n (l ++ l') = l'.
 Proof. intro. rewrite <- H. apply skipn_app_length. Qed.
 
-Lemma firstn_app {A} (l l' : list A) : 
+Lemma firstn_app {A} (l l' : list A) :
   firstn (length l) (l ++ l') = l.
 Proof.
  induction l; intros; simpl; trivial.
  rewrite IHl; trivial.
 Qed.
 
-Lemma firstn_app2 : forall (A : Type) (l l' : list A) n, 
+Lemma firstn_app2 : forall (A : Type) (l l' : list A) n,
  length l = n -> firstn n (l ++ l') = l .
 Proof. intros; subst; apply firstn_app. Qed.
 End Firstn_skipn.

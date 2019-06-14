@@ -16,6 +16,7 @@ Notation rule := (Syntax.rule variable function constructor).
 Notation term := (Syntax.term variable function constructor).
 Notation value := (Syntax.value constructor).
 Notation cbv := (CBV_cache.cbv variable function constructor).
+Notation "'╎' t '╎'" := (@term_size variable function constructor t) (at level 10).
 
 Variable prog : list rule.
 Variable rule_default : rule.
@@ -36,16 +37,16 @@ Hypothesis max_rank_is_max_rank : forall f, rank f <= max_rank.
 
 Notation PPO_prog := (Ordering.PPO_prog prog rank).
 
-(* Lemme pas de doublons dans les activations *)
-Lemma NoDup_left_activations_cache_order i s p c1 t c2 v:
+(** There are no duplicates in ℐᵃ *)
+Lemma NoDup_left_ℐᵃ_cache_order i s p c1 t c2 v:
   PPO_prog ->
   wf (cbv_update i s p c1 t c2 v) ->
-  NoDup (map (@proj_left _ _ _) (activations_cache_order (cbv_update i s p c1 t c2 v))).
+  NoDup (map (@proj_left _ _ _) (ℐᵃ_cache_order (cbv_update i s p c1 t c2 v))).
 Proof.
   intros Hppoprg Hwf;
   assert (Hgeneralized:
             forall (p: cbv),
-              let act_lefts := map (@proj_left _ _ _) (activations_cache_order p) in
+              let act_lefts := map (@proj_left _ _ _) (ℐᵃ_cache_order p) in
               wf p ->
               NoDup act_lefts /\
               (forall t, In t act_lefts -> ~ In t (map (@fst term value) (cache_left p))));
@@ -148,7 +149,7 @@ Proof.
                 destruct Hcachepath as ( Hcacheeq & Hcachepath ).
                 rewrite in_app_iff.
                 intro Hf; destruct Hf as [Hflp'' | Hfp''].
-              + assert (HND : NoDup  (map (proj_left (constructor:=constructor)) (activations_cache_order p' ++ revflatten (map (activations_cache_order (constructor:=constructor)) lp'')))).
+              + assert (HND : NoDup  (map (proj_left (constructor:=constructor)) (ℐᵃ_cache_order p' ++ revflatten (map (ℐᵃ_cache_order (constructor:=constructor)) lp'')))).
                 {
                     eapply IH with (c1 := cache_right p''); try trivial.
                     intros; apply IHlp; auto with *.
@@ -201,7 +202,7 @@ Proof.
              simpl in Hcachepath.
              rewrite andb_true_iff in Hcachepath;
              rewrite cache_beq_eq in Hcachepath; try tauto.
-             destruct Hcachepath as [Heq Hcachepath]. (* utile ? *)
+             destruct Hcachepath as [Heq Hcachepath].
              destruct Ht as [Ht | Ht].
             - assert (Hnin : ~ t ∈ map (@fst _ _) (cache_left p')).
               + apply IHp; assumption.
@@ -240,15 +241,15 @@ Proof.
          apply in_map_iff in Hfalse.
          destruct Hfalse as (p0 & Hp0eq & Hp0act).
          eapply Permutation.Permutation_in in Hp0act;
-           [| symmetry; apply activations_cache_order_are_activations].
-         pose (proof_tree := cbv_update i s p' c1 t c2 v).
-         apply PPO_activations with (rank := rank) (p' := p0) in Hwf; simpl; try tauto.
+           [| symmetry; apply ℐᵃ_cache_order_are_ℐᵃ].
+         pose (π := cbv_update i s p' c1 t c2 v).
+         apply PPO_ℐᵃ with (rank := rank) (p' := p0) in Hwf; simpl; try tauto.
          destruct Hwf.
             subst p0.
             clear Hp0eq.
-            apply activations_inCBV,
-                  InCBV_In_sub_trees,
-                  sub_trees_size_rec_le,
+            apply ℐᵃ_inCBV,
+                  InCBV_In_ℐ,
+                ℐ_size_rec_le,
                   le_not_lt in Hp0act.
 
             apply Hp0act.
@@ -288,70 +289,68 @@ Proof.
     + tauto.
 Qed.
 
-Lemma NoDup_left_activations i s p c1 t c2 v:
+Lemma NoDup_left_ℐᵃ i s p c1 t c2 v:
   PPO_prog ->
   wf (cbv_update i s p c1 t c2 v) ->
-  NoDup (map (@proj_left _ _ _) (activations (cbv_update i s p c1 t c2 v))).
+  NoDup (map (@proj_left _ _ _) (ℐᵃ (cbv_update i s p c1 t c2 v))).
 Proof.
   intros HPPO Hwf.
   eapply NoDup_Permutation_NoDup. (* 8.5 : Permutation.Permutation_NoDup *)
-  - apply NoDup_left_activations_cache_order.
+  - apply NoDup_left_ℐᵃ_cache_order.
     +  exact HPPO.
 
     + exact Hwf.
 
   - apply Permutation.Permutation_map.
     apply Permutation.Permutation_sym.
-    apply activations_cache_order_are_activations.
+    apply ℐᵃ_cache_order_are_ℐᵃ.
 Qed.
 
-(* Proposition 7 *)
+Definition ℐᵃ_at_rank (rk: nat) (p : cbv) : list cbv :=
+  filter (fun p => beq_nat rk (activation_rank rank p)) (ℐᵃ p).
 
-Definition activations_at_rank (rk: nat) (p : cbv) : list cbv :=
-  filter (fun p => beq_nat rk (activation_rank rank p)) (activations p).
-
-Lemma activations_at_rank_incl_activations (rk: nat) (p: cbv) :
-  incl (activations_at_rank rk p) (activations p).
+Lemma ℐᵃ_at_rank_incl_ℐᵃ (rk: nat) (p: cbv) :
+  incl (ℐᵃ_at_rank rk p) (ℐᵃ p).
 Proof.
-unfold activations_at_rank.
+unfold ℐᵃ_at_rank.
 apply incl_filter.
 Qed.
 
-Lemma activations_at_rank_wf (rk: nat) (p p': cbv) :
+Lemma ℐᵃ_at_rank_wf (rk: nat) (p p': cbv) :
   wf p ->
-  In p' (activations_at_rank rk p) ->
+  In p' (ℐᵃ_at_rank rk p) ->
   wf p'.
 Proof.
 intros Hwf Hin.
-apply activations_at_rank_incl_activations in Hin.
-eapply activations_wf.
+apply ℐᵃ_at_rank_incl_ℐᵃ in Hin.
+eapply ℐᵃ_wf.
 - eexact Hwf.
 - assumption.
 Qed.
 
 (* Computes A_T, with a given maximal *)
-Definition A_T (proof_tree: cbv) : nat :=
-  maxl (map (fun p => length (activations_at_rank (activation_rank rank p) p)) (activations proof_tree)).
+Definition A_T (π: cbv) : nat :=
+  maxl (map (fun p => length (ℐᵃ_at_rank (activation_rank rank p) p)) (ℐᵃ π)).
 
 (* B_i, with i = rank *)
-Definition activations_at_rank_bound (A_T: nat) (rank: nat) :=
+Definition ℐᵃ_at_rank_bound (A_T: nat) (rank: nat) :=
   Nat.pow max_rank (max_rank - rank) *
   Nat.pow (max 1 (max_nb_rhs_functions prog)) (max_rank - rank) *
   Nat.pow A_T (S (max_rank - rank)).
 
 Definition gary_seven_poly (A_T:nat) :=
-  suml (map (activations_at_rank_bound A_T) (seq 0 (S max_rank))).
+  suml (map (ℐᵃ_at_rank_bound A_T) (seq 0 (S max_rank))).
 
 Lemma PPO_activation_rank_decreasing i s p c1 f lt c2 v:
-  let proof_tree := cbv_update i s p c1 (fapply f lt) c2 v in
+  let π := cbv_update i s p c1 (fapply f lt) c2 v in
   PPO_prog ->
-  wf proof_tree ->
-  forall p, In p (activations proof_tree) ->
+  wf π ->
+  forall p, In p (ℐᵃ π) ->
   activation_rank rank p <= rank f.
 Proof.
-  intros proof_tree HPPO Hwf p' Hp'.
-  assert (p' = proof_tree \/ PPO rank (proj_left p') (proj_left proof_tree)) as H by 
-         (eapply PPO_activations; eauto).
+  intros π HPPO Hwf p' Hp'.
+  assert (p' = π \/ PPO rank (proj_left p') (proj_left π)) as H by
+         (eapply PPO_ℐᵃ; eauto).
   destruct H as [H | H].
   - rewrite H; trivial.
 
@@ -364,7 +363,7 @@ Proof.
     rewrite Hp' in H.
     simpl in H.
     subst p'.
-    simpl in Hwf. 
+    simpl in Hwf.
     decompose record Hwf.
     rewrite H3 in H.
     now apply PPO_activation_le_rank in H.
@@ -374,8 +373,8 @@ Hint Resolve lt_0_pow.
 
 Hint Rewrite mult_1_l.
 
-Fixpoint first_activations_at_given_rank (rk: nat) (proof_tree : cbv) : list cbv :=
-  match proof_tree with
+Fixpoint first_activations_at_given_rank (rk: nat) (π : cbv) : list cbv :=
+  match π with
   | cbv_constr lp _ _ _ _ => flat_map (first_activations_at_given_rank rk) lp
   | cbv_split lp p _ _ _ _ => first_activations_at_given_rank rk p ++ flat_map (first_activations_at_given_rank rk) lp
   | cbv_update _ _ p _ (fapply f _) _ _ as p' => if eq_nat_dec rk (rank f)
@@ -413,8 +412,8 @@ Proof.
   - tauto.
 Qed.
 
-Lemma first_activations_at_given_rank_sublist_activations rk p :
-  sublist (first_activations_at_given_rank rk p) (activations p).
+Lemma first_activations_at_given_rank_sublist_ℐᵃ rk p :
+  sublist (first_activations_at_given_rank rk p) (ℐᵃ p).
 Proof.
 induction p using cbv_ind2; simpl.
 - apply sublist_flatmap_in_ext; assumption.
@@ -428,30 +427,30 @@ induction p using cbv_ind2; simpl.
 - apply sublist_refl.
 Qed.
 
-Lemma NoDup_activations i s p c1 t c2 v : 
+Lemma NoDup_ℐᵃ i s p c1 t c2 v :
   PPO_prog ->
   wf (cbv_update i s p c1 t c2 v) ->
-  NoDup (activations (cbv_update i s p c1 t c2 v)).
+  NoDup (ℐᵃ (cbv_update i s p c1 t c2 v)).
 Proof.
 intros HPPO Hwf.
 eapply NoDup_map_inv.
-  apply NoDup_left_activations; assumption.
+  apply NoDup_left_ℐᵃ; assumption.
 Qed.
 
-Lemma NoDup_first_activations_at_given_rank rk i s p c1 t c2 v : 
+Lemma NoDup_first_activations_at_given_rank rk i s p c1 t c2 v :
   PPO_prog ->
   wf (cbv_update i s p c1 t c2 v) ->
   NoDup (first_activations_at_given_rank rk (cbv_update i s p c1 t c2 v)).
 Proof.
 intros.
 eapply NoDup_sublist.
-- apply first_activations_at_given_rank_sublist_activations.
+- apply first_activations_at_given_rank_sublist_ℐᵃ.
 
-- apply NoDup_activations; assumption.
+- apply NoDup_ℐᵃ; assumption.
 Qed.
 
-Lemma first_activations_at_given_rank_activations rk p: 
-  incl (first_activations_at_given_rank rk p) (activations p).
+Lemma first_activations_at_given_rank_ℐᵃ rk p:
+  incl (first_activations_at_given_rank rk p) (ℐᵃ p).
 Proof.
   induction p using cbv_ind2; intros p' Hin; simpl in *.
   - apply in_flat_map in Hin.
@@ -493,84 +492,84 @@ Qed.
 
 Lemma A_T_activation_rank (p p' : cbv) :
   In p' (first_activations_at_given_rank (activation_rank rank p') p) ->
-    length (activations_at_rank (activation_rank rank p') p') <= A_T p.
+    length (ℐᵃ_at_rank (activation_rank rank p') p') <= A_T p.
 Proof.
   intro Hin.
-  unfold activations_at_rank.
+  unfold ℐᵃ_at_rank.
   unfold A_T.
-  unfold activations_at_rank.
+  unfold ℐᵃ_at_rank.
   apply maxl_is_max.
   apply in_map_iff.
   exists p'.
   split.
   - trivial.
-  - apply first_activations_at_given_rank_activations in Hin.
+  - apply first_activations_at_given_rank_ℐᵃ in Hin.
     assumption.
 Qed.
 
 Lemma activation_eq_dec p i s p0 c1 t c2 v:
-  let proof_tree := cbv_update i s p0 c1 t c2 v in
+  let π := cbv_update i s p0 c1 t c2 v in
   PPO_prog ->
-  wf proof_tree ->
-  In p (activations proof_tree) -> p = proof_tree \/ p <> proof_tree.
+  wf π ->
+  In p (ℐᵃ π) -> p = π \/ p <> π.
 Proof.
-intros proof_tree HPPO H1 H2.
-unfold proof_tree in H2.
-rewrite activations_first_activations in H2.
+intros π HPPO H1 H2.
+unfold π in H2.
+rewrite ℐᵃ_first_activations in H2.
 simpl in H2.
 destruct H2 as [ | H2]; [ subst; tauto | ].
 right.
 intro Heq.
-apply NoDup_app_in_l with (l := [cbv_update i s p0 c1 t c2 v]) (l' := flat_map (activations (constructor:=constructor)) (first_activations_rec p0)) (x := cbv_update i s p0 c1 t c2 v).
+apply NoDup_app_in_l with (l := [cbv_update i s p0 c1 t c2 v]) (l' := flat_map (ℐᵃ (constructor:=constructor)) (first_activations_rec p0)) (x := cbv_update i s p0 c1 t c2 v).
 - simpl.
-  erewrite <- activations_first_activations.
-  apply NoDup_activations; assumption.
+  erewrite <- ℐᵃ_first_activations.
+  apply NoDup_ℐᵃ; assumption.
 
 - auto with *.
 
 - subst; assumption.
 Qed.
 
-Lemma activations_trans p p' p'' : wf p'' ->
-  In p (activations p') -> In p' (activations p'') -> In p (activations p'').
+Lemma ℐᵃ_trans p p' p'' : wf p'' ->
+  In p (ℐᵃ p') -> In p' (ℐᵃ p'') -> In p (ℐᵃ p'').
 Proof.
 intros Hwf Hin1 Hin2.
 generalize Hin1.
 intro Hin1'.
 apply activation_is_function in Hin1.
 destruct Hin1 as (i & s & p0 & c1 & t & c2 & v & Heq).
-apply cbv_update_in_activations_InCBV with i s p0 c1 t c2 v; try tauto.
-eapply InCBV_trans; apply activations_inCBV; eauto.
+apply cbv_update_in_ℐᵃ_InCBV with i s p0 c1 t c2 v; try tauto.
+eapply InCBV_trans; apply ℐᵃ_inCBV; eauto.
 Qed.
 
 Lemma first_activation_down p i s p0 c1 t c2 v:
-  let proof_tree := cbv_update i s p0 c1 t c2 v in
+  let π := cbv_update i s p0 c1 t c2 v in
   PPO_prog ->
-  wf proof_tree -> p <> proof_tree ->
-  In p (activations proof_tree) ->
-  exists p', In p' (activations proof_tree) /\ In p (first_activations p').
+  wf π -> p <> π ->
+  In p (ℐᵃ π) ->
+  exists p', In p' (ℐᵃ π) /\ In p (first_activations p').
 Proof.
-intros proof_tree PPO_prog.
+intros π PPO_prog.
 apply cbv_big_induction.
-clear proof_tree i s c1 t c2 v.
+clear π i s c1 t c2 v.
 intros.
-rewrite activations_first_activations in H2.
+rewrite ℐᵃ_first_activations in H2.
 destruct H2 as [ | H2]; [ subst; tauto | ].
 apply in_flat_map in H2.
 destruct H2 as (p' & Hin1 & Hin2).
 generalize Hin2.
 intro Hin2'.
-edestruct activation_is_function with (p:= p'); 
-  [(apply first_activations_incl_activations; exact Hin1) |] .
+edestruct activation_is_function with (p:= p');
+  [(apply first_activations_incl_ℐᵃ; exact Hin1) |] .
 destruct H2 as (s' & p'0 & c1' & t' & c2' & v' & Heq).
 subst p'.
 assert (Hwf' : wf (cbv_update x s' p'0 c1' t' c2' v')) by
   (eapply wf_InCBV_wf; try eauto;
-  apply activations_inCBV;
-  apply first_activations_incl_activations;
+  apply ℐᵃ_inCBV;
+  apply first_activations_incl_ℐᵃ;
   exact Hin1).
 edestruct activation_eq_dec with (p:=p); eauto.
-- exists (cbv_update i s p1 c1 t c2 v); simpl activations.
+- exists (cbv_update i s p1 c1 t c2 v); simpl ℐᵃ.
   split; [auto with * | subst; assumption].
 
 - generalize Hin1.
@@ -579,12 +578,12 @@ edestruct activation_eq_dec with (p:=p); eauto.
   destruct Hin1' as (p'' & Hp'').
   exists p''.
   split.
-  + eapply activations_trans.
+  + eapply ℐᵃ_trans.
     * assumption.
 
     * destruct Hp''; eauto.
 
-    * apply first_activations_incl_activations; assumption.
+    * apply first_activations_incl_ℐᵃ; assumption.
 
   + tauto.
 Qed.
@@ -594,7 +593,7 @@ Fixpoint FA_path p p' (lp : list cbv) := match lp with
  | h :: t => In p (first_activations h) /\ FA_path h p' t
 end.
 
-Lemma FA_path_app p p' p'' lp1 lp2 : 
+Lemma FA_path_app p p' p'' lp1 lp2 :
   FA_path p p' lp1 /\ FA_path p' p'' lp2 -> FA_path p p'' (lp1 ++ lp2).
 Proof.
 revert p p' p''.
@@ -606,7 +605,7 @@ induction lp1; simpl; intros p p' p'' (Heq & Hpath).
   tauto.
 Qed.
 
-Lemma FA_path_right p p' p'' lp : 
+Lemma FA_path_right p p' p'' lp :
   FA_path p p' lp ->
   (In p' (first_activations p'') <->
    FA_path p p'' (lp ++ [p''])).
@@ -633,7 +632,7 @@ Lemma FA_path_end p p' x lp : FA_path p p' (lp++[x]) -> x = p'.
 Proof.
 revert p p' x.
 induction lp; intros p p' x Hpath.
-- simpl in Hpath; tauto. 
+- simpl in Hpath; tauto.
 
 - simpl in Hpath.
   destruct Hpath as (Hin & Hpath).
@@ -670,21 +669,21 @@ induction p0 using cbv_ind2; simpl; case eq_nat_dec; intro Heq; try omega; trivi
 Qed.
 
 Lemma first_activations_at_given_rank_path p p' i s p0 c1 t c2 v :
-  let proof_tree := cbv_update i s p0 c1 t c2 v in
-  In p' (activations proof_tree) ->
-  In p (activations p') ->
+  let π := cbv_update i s p0 c1 t c2 v in
+  In p' (ℐᵃ π) ->
+  In p (ℐᵃ p') ->
   exists lp, FA_path p p' lp.
 Proof.
-intro proof_tree.
+intro π.
 revert p p'.
-unfold proof_tree.
+unfold π.
 apply cbv_big_induction.
-clear i s p0 c1 t c2 v proof_tree.
+clear i s p0 c1 t c2 v π.
 intros i s p0 c1 t c2 v Hind p' p'' Hp'' Hp'.
-rewrite activations_first_activations in Hp''.
+rewrite ℐᵃ_first_activations in Hp''.
 destruct Hp'' as [Heq | Hin].
 - subst.
-  rewrite activations_first_activations in Hp'.
+  rewrite ℐᵃ_first_activations in Hp'.
   destruct Hp' as [Heq | Hin].
   + subst.
     exists []; simpl; trivial.
@@ -693,7 +692,7 @@ destruct Hp'' as [Heq | Hin].
      assert (Hlp : exists lp : list cbv, FA_path p' p'' lp).
      {
        eapply (Hind p'' Hp''1).
-       apply first_activations_incl_activations, activation_is_function in Hp''1.
+       apply first_activations_incl_ℐᵃ, activation_is_function in Hp''1.
        destruct Hp''1 as (a1 & a2 & a3 & a4 & a5 & a6 & a7 & H).
        subst; simpl;tauto.
        assumption.
@@ -709,13 +708,13 @@ destruct Hp'' as [Heq | Hin].
 Qed.
 
 Lemma FA_path_activation p p' i s p0 c1 t c2 v lp :
-  let proof_tree := cbv_update i s p0 c1 t c2 v in
-  wf proof_tree ->
-  In p' (activations proof_tree) ->
-  FA_path p p' lp -> In p (activations p').
+  let π := cbv_update i s p0 c1 t c2 v in
+  wf π ->
+  In p' (ℐᵃ π) ->
+  FA_path p p' lp -> In p (ℐᵃ p').
 Proof.
 revert p p'.
-induction lp; intros p p' proof_tree Hwf Ha Hpath.
+induction lp; intros p p' π Hwf Ha Hpath.
 - simpl in Hpath.
   subst.
   apply activation_is_function in Ha.
@@ -723,10 +722,10 @@ induction lp; intros p p' proof_tree Hwf Ha Hpath.
   subst; left; trivial.
 
 - simpl in Hpath.
-  apply activations_trans with a.
-  + eapply activations_wf; eauto.
+  apply ℐᵃ_trans with a.
+  + eapply ℐᵃ_wf; eauto.
 
-  + apply first_activations_incl_activations; tauto.
+  + apply first_activations_incl_ℐᵃ; tauto.
 
   + apply IHlp; tauto.
 Qed.
@@ -739,10 +738,10 @@ Proof.
 intros HPPO Hwf.
 intro Hin.
 generalize Hin; intro Hfa.
-apply first_activations_incl_activations, activation_is_function in Hfa.
+apply first_activations_incl_ℐᵃ, activation_is_function in Hfa.
 destruct Hfa as (i & s & p0 & c1 & t & c2 & v & Heq); subst p.
-apply NoDup_activations in Hwf; try assumption.
-rewrite activations_first_activations in Hwf.
+apply NoDup_ℐᵃ in Hwf; try assumption.
+rewrite ℐᵃ_first_activations in Hwf.
 apply In_prefix_suffix in Hin.
 destruct Hin as (l1 & l2 & H12).
 rewrite H12 in Hwf; clear H12.
@@ -756,7 +755,7 @@ Qed.
 Lemma first_activations_irrefl i s p0 c1 t c2 v p:
   PPO_prog ->
   wf (cbv_update i s p0 c1 t c2 v) ->
-   (cbv_update i s p0 c1 t c2 v) ∈ activations p ->
+   (cbv_update i s p0 c1 t c2 v) ∈ ℐᵃ p ->
    ~ In p (first_activations  (cbv_update i s p0 c1 t c2 v)).
 Proof.
 intros PPO_prog.
@@ -764,12 +763,12 @@ revert p.
 apply cbv_big_induction.
 clear i s p0 c1 t c2 v.
 intros i s p0 c1 t c2 v H p Hwf Ha Hfa.
-assert (Hact : In p (activations (cbv_update i s p0 c1 t c2 v)))
-  by (apply first_activations_incl_activations; assumption).
+assert (Hact : In p (ℐᵃ (cbv_update i s p0 c1 t c2 v)))
+  by (apply first_activations_incl_ℐᵃ; assumption).
 apply activation_is_function in Hact.
 destruct Hact as (ii & ss & pp & cc1 & tt & cc2 & vv & Heq).
 subst.
-rewrite activations_first_activations in Ha.
+rewrite ℐᵃ_first_activations in Ha.
 destruct Ha as [Heq | Hflat].
 - rewrite Heq in Hfa; apply first_activations_strict in Hfa; assumption.
 
@@ -777,27 +776,27 @@ destruct Ha as [Heq | Hflat].
   destruct Hflat as (p' & Hin' & Ha').
   simpl in H.
   eapply H; try eauto.
-  + apply activations_wf with (cbv_update i s p0 c1 t c2 v).
+  + apply ℐᵃ_wf with (cbv_update i s p0 c1 t c2 v).
      * assumption.
 
-     * apply first_activations_incl_activations; assumption.
+     * apply first_activations_incl_ℐᵃ; assumption.
 
-  + eapply activations_trans.
-    * eapply activations_wf; [apply Hwf|].
-       apply activations_trans with (cbv_update ii ss pp cc1 tt cc2 vv).
+  + eapply ℐᵃ_trans.
+    * eapply ℐᵃ_wf; [apply Hwf|].
+       apply ℐᵃ_trans with (cbv_update ii ss pp cc1 tt cc2 vv).
         assumption.
 
-        apply first_activations_incl_activations; assumption.
+        apply first_activations_incl_ℐᵃ; assumption.
 
-        apply first_activations_incl_activations; assumption.
+        apply first_activations_incl_ℐᵃ; assumption.
 
-    * apply first_activations_incl_activations.
-      exact Hfa. 
+    * apply first_activations_incl_ℐᵃ.
+      exact Hfa.
 
     * assumption.
 Qed.
 
-Lemma FA_path_refl p p' lp : PPO_prog -> wf p' -> FA_path p p' lp -> In p' (activations p) -> lp = [].
+Lemma FA_path_refl p p' lp : PPO_prog -> wf p' -> FA_path p p' lp -> In p' (ℐᵃ p) -> lp = [].
 Proof.
 revert p p'.
 induction lp; intros p p' PPO_prog Hwf Hpath Hin.
@@ -807,8 +806,8 @@ induction lp; intros p p' PPO_prog Hwf Hpath Hin.
   destruct Hpath as (Hfa & Hpath).
   assert (Hnil : lp = []).
   + eapply IHlp; eauto.
-    eapply activations_trans; [| exact Hin| apply first_activations_incl_activations; assumption].
-    apply activations_wf with p'; try assumption.
+    eapply ℐᵃ_trans; [| exact Hin| apply first_activations_incl_ℐᵃ; assumption].
+    apply ℐᵃ_wf with p'; try assumption.
     apply activation_is_function in Hin.
     destruct Hin as (i & s & p0 & c1 & t & c2 & v & Heq).
     subst p'.
@@ -839,7 +838,7 @@ induction lp1; intros p lp2 Hpath.
   split; simpl; auto.
 Qed.
 
-Lemma FA_path_uniqueness p i s p0 c1 t c2 v lp1 lp2 : PPO_prog -> 
+Lemma FA_path_uniqueness p i s p0 c1 t c2 v lp1 lp2 : PPO_prog ->
   let p' := (cbv_update i s p0 c1 t c2 v) in
   wf p' ->
   FA_path p p' lp1 -> FA_path p p' lp2 -> lp1 = lp2.
@@ -857,10 +856,10 @@ induction lp1 using rev_ind; intros p i s p0 c1 t c2 v lp2 HPPO p' Hwf Hpath1 Hp
        apply first_activations_strict; assumption.
 
     * assert( Hwfc : wf c). {
-         eapply activations_wf; [eauto|].
+         eapply ℐᵃ_wf; [eauto|].
          eapply FA_path_activation; eauto; left; trivial.
       }
-       assert (In c (activations c)). {
+       assert (In c (ℐᵃ c)). {
         eapply FA_path_activation, activation_is_function in Hpath2; try left; eauto.
         destruct Hpath2 as (i' & s' & p0' & c1' & t' & c2' & v' & Heq'); subst c.
         left; trivial.
@@ -894,81 +893,81 @@ induction lp1 using rev_ind; intros p i s p0 c1 t c2 v lp2 HPPO p' Hwf Hpath1 Hp
     destruct H as [Heq | (l1 & l2 & l3 & [Hl | Hl])].
     * subst p1.
       generalize Hp1'; intro Heq.
-      apply first_activations_incl_activations, activation_is_function in Heq.
+      apply first_activations_incl_ℐᵃ, activation_is_function in Heq.
       destruct Heq as  (i' & s' & p0' & c1' & t' & c2' & v' & Heq'); subst p2.
        eapply (IHlp1 p _); [trivial |
-                            apply activations_wf with p', first_activations_incl_activations; trivial|
+                            apply ℐᵃ_wf with p', first_activations_incl_ℐᵃ; trivial|
                             eauto |
                             eauto ]; trivial.
-    * assert (H : NoDup (activations p')) by (apply NoDup_activations; subst p'; trivial).
+    * assert (H : NoDup (ℐᵃ p')) by (apply NoDup_ℐᵃ; subst p'; trivial).
        subst p'.
-       rewrite activations_first_activations in H.
+       rewrite ℐᵃ_first_activations in H.
        rewrite Hl in H.
        repeat (rewrite flat_map_app in H; simpl in H).
-       eapply FA_path_activation in Hp1; [ | exact Hwf | apply first_activations_incl_activations; trivial].
-       eapply FA_path_activation in Hp2; [ | exact Hwf | apply first_activations_incl_activations; trivial].
+       eapply FA_path_activation in Hp1; [ | exact Hwf | apply first_activations_incl_ℐᵃ; trivial].
+       eapply FA_path_activation in Hp2; [ | exact Hwf | apply first_activations_incl_ℐᵃ; trivial].
        apply in_split in Hp1; apply in_split in Hp2.
        destruct Hp1 as (ll1 & ll1' & Hll1).
        destruct Hp2 as (ll2 & ll2' & Hll2).
        rewrite Hll1, Hll2 in H.
-       replace ((cbv_update i s p0 c1 t c2 v :: flat_map (activations (constructor:=constructor)) l1 ++
-          (ll1 ++ p :: ll1') ++ flat_map (activations (constructor:=constructor)) l2 ++
-          (ll2 ++ p :: ll2') ++ flat_map (activations (constructor:=constructor)) l3)) with
-          ((cbv_update i s p0 c1 t c2 v :: flat_map (activations (constructor:=constructor)) l1 ++
+       replace ((cbv_update i s p0 c1 t c2 v :: flat_map (ℐᵃ (constructor:=constructor)) l1 ++
+          (ll1 ++ p :: ll1') ++ flat_map (ℐᵃ (constructor:=constructor)) l2 ++
+          (ll2 ++ p :: ll2') ++ flat_map (ℐᵃ (constructor:=constructor)) l3)) with
+          ((cbv_update i s p0 c1 t c2 v :: flat_map (ℐᵃ (constructor:=constructor)) l1 ++
           (ll1 ++ p :: ll1')) ++
-          (flat_map (activations (constructor:=constructor)) l2 ++
-          (ll2 ++ p :: ll2') ++ flat_map (activations (constructor:=constructor)) l3)) in H by
+          (flat_map (ℐᵃ (constructor:=constructor)) l2 ++
+          (ll2 ++ p :: ll2') ++ flat_map (ℐᵃ (constructor:=constructor)) l3)) in H by
           (repeat rewrite app_assoc; trivial).
        eapply NoDup_app_in_l with (x := p) in H; [contradict H | right];
               repeat rewrite in_app_iff; auto with *.
 
-    * assert (H : NoDup (activations p')) by (apply NoDup_activations; subst p'; trivial).
+    * assert (H : NoDup (ℐᵃ p')) by (apply NoDup_ℐᵃ; subst p'; trivial).
        subst p'.
-       rewrite activations_first_activations in H.
+       rewrite ℐᵃ_first_activations in H.
        rewrite Hl in H.
        repeat (rewrite flat_map_app in H; simpl in H).
-       eapply FA_path_activation in Hp1; [ | exact Hwf | apply first_activations_incl_activations; trivial].
-       eapply FA_path_activation in Hp2; [ | exact Hwf | apply first_activations_incl_activations; trivial].
+       eapply FA_path_activation in Hp1; [ | exact Hwf | apply first_activations_incl_ℐᵃ; trivial].
+       eapply FA_path_activation in Hp2; [ | exact Hwf | apply first_activations_incl_ℐᵃ; trivial].
        apply in_split in Hp1; apply in_split in Hp2.
        destruct Hp1 as (ll1 & ll1' & Hll1).
        destruct Hp2 as (ll2 & ll2' & Hll2).
        rewrite Hll1, Hll2 in H.
-       replace ((cbv_update i s p0 c1 t c2 v :: flat_map (activations (constructor:=constructor)) l1 ++
-          (ll2 ++ p :: ll2') ++ flat_map (activations (constructor:=constructor)) l2 ++
-          (ll1 ++ p :: ll1') ++ flat_map (activations (constructor:=constructor)) l3)) with
-          ((cbv_update i s p0 c1 t c2 v :: flat_map (activations (constructor:=constructor)) l1 ++
+       replace ((cbv_update i s p0 c1 t c2 v :: flat_map (ℐᵃ (constructor:=constructor)) l1 ++
+          (ll2 ++ p :: ll2') ++ flat_map (ℐᵃ (constructor:=constructor)) l2 ++
+          (ll1 ++ p :: ll1') ++ flat_map (ℐᵃ (constructor:=constructor)) l3)) with
+          ((cbv_update i s p0 c1 t c2 v :: flat_map (ℐᵃ (constructor:=constructor)) l1 ++
           (ll2 ++ p :: ll2')) ++
-          (flat_map (activations (constructor:=constructor)) l2 ++
-          (ll1 ++ p :: ll1') ++ flat_map (activations (constructor:=constructor)) l3)) in H by
+          (flat_map (ℐᵃ (constructor:=constructor)) l2 ++
+          (ll1 ++ p :: ll1') ++ flat_map (ℐᵃ (constructor:=constructor)) l3)) in H by
           (repeat rewrite app_assoc; trivial).
        eapply NoDup_app_in_l with (x := p) in H; [contradict H | right];
-              repeat rewrite in_app_iff; auto with *. 
+              repeat rewrite in_app_iff; auto with *.
 Qed.
 
-Lemma activations_strict i s p0 c1 t c2 v :
+Lemma ℐᵃ_strict i s p0 c1 t c2 v :
   wf (cbv_update i s p0 c1 t c2 v) ->
-  ~ cbv_update i s p0 c1 t c2 v ∈ activations p0.
+  ~ cbv_update i s p0 c1 t c2 v ∈ ℐᵃ p0.
 Proof.
 intros Hwf Hin.
 assert (size_rec (cbv_update i s p0 c1 t c2 v) <= size_rec p0).
-  apply sub_trees_size_rec_le.
-  apply activations_are_subtrees; assumption.
+  apply ℐ_size_rec_le.
+  apply ℐᵃ_are_subtrees; assumption.
 destruct t; simpl in H; omega.
 Qed.
 
 Lemma first_activation_down_rank_lt p p' i s p0 c1 t c2 v:
-  let proof_tree := cbv_update i s p0 c1 t c2 v in
+  let π := cbv_update i s p0 c1 t c2 v in
   PPO_prog ->
-  wf proof_tree ->
-  In p' (activations proof_tree) -> In p (first_activations p') ->
-  In p (first_activations_at_given_rank (activation_rank rank p) proof_tree) ->
+  wf π ->
+  In p' (ℐᵃ π) -> In p (first_activations p') ->
+  In p (first_activations_at_given_rank (activation_rank rank p) π) ->
   activation_rank rank p < activation_rank rank p'.
 Proof.
-intros proof_tree HPPO.
-unfold proof_tree in *.
+intros π HPPO.
+unfold π in *.
 revert p p'.
 apply cbv_big_induction.
-clear i s p0 c1 t c2 v proof_tree.
+clear i s p0 c1 t c2 v π.
 intros i s p0 c1 t c2 v H p p'.
 intros Hwf Ha Hfa Hfagr.
 destruct t; try tauto; try inversion Hfagr.
@@ -977,7 +976,7 @@ destruct eq_nat_dec as [Heq | Hneq] in Hfagr.
 - simpl in Hfagr; destruct Hfagr ; try tauto.
   subst p.
   clear Heq.
-  rewrite activations_first_activations in Ha.
+  rewrite ℐᵃ_first_activations in Ha.
   destruct Ha as [Hroot | Htail].
   +  subst p'.
      contradict Hfa.
@@ -986,11 +985,11 @@ destruct eq_nat_dec as [Heq | Hneq] in Hfagr.
   +  apply in_flat_map in Htail.
      destruct Htail as (p'' & Hin'' & Hp'').
      apply first_activations_irrefl in Hin''; try tauto.
-     apply activations_trans with p'; try assumption.
-     * eapply activations_wf; [exact Hwf|].
-        apply first_activations_incl_activations; assumption.
+     apply ℐᵃ_trans with p'; try assumption.
+     * eapply ℐᵃ_wf; [exact Hwf|].
+        apply first_activations_incl_ℐᵃ; assumption.
 
-     * apply first_activations_incl_activations; assumption.
+     * apply first_activations_incl_ℐᵃ; assumption.
 
 - destruct Ha as [Heqp' | Hneqp'].
   + subst p'.
@@ -998,7 +997,7 @@ destruct eq_nat_dec as [Heq | Hneq] in Hfagr.
     simpl.
     assert (activation_rank rank p <= rank f).
     * eapply PPO_activation_rank_decreasing; eauto.
-       apply first_activations_incl_activations.
+       apply first_activations_incl_ℐᵃ.
        assumption.
 
     * simpl in Hneq.
@@ -1008,18 +1007,18 @@ destruct eq_nat_dec as [Heq | Hneq] in Hfagr.
      destruct Hfagr as (p'' & Hin'' & Hp'').
      simpl in H.
      apply H with p''; try tauto.
-     * eapply activations_wf; [exact Hwf |].
-        apply first_activations_incl_activations.
+     * eapply ℐᵃ_wf; [exact Hwf |].
+        apply first_activations_incl_ℐᵃ.
         assumption.
 
-     * apply first_activations_at_given_rank_activations in Hp''.
-        generalize Hp''; intro Hpp''. 
+     * apply first_activations_at_given_rank_ℐᵃ in Hp''.
+        generalize Hp''; intro Hpp''.
         eapply (first_activations_at_given_rank_path _ _ i s p0 c1 (fapply f l) c2 v)  in Hp'';
-          [| apply first_activations_incl_activations; simpl; assumption].
+          [| apply first_activations_incl_ℐᵃ; simpl; assumption].
         destruct Hp'' as (lp1 & Hpath1).
         assert( Hpath2 :FA_path p (cbv_update i s p0 c1 (fapply f l) c2 v) (lp1 ++ [(cbv_update i s p0 c1 (fapply f l) c2 v)] )) by (apply FA_path_right with p''; assumption).
 
-        assert (Hpath3 : In p' (activations (cbv_update i s p0 c1 (fapply f l) c2 v))) by (right; assumption).
+        assert (Hpath3 : In p' (ℐᵃ (cbv_update i s p0 c1 (fapply f l) c2 v))) by (right; assumption).
         eapply first_activations_at_given_rank_path in  Hpath3;  [| left; trivial].
         destruct Hpath3 as (lp2 & Hlp2).
         assert(Hpath4 : FA_path p (cbv_update i s p0 c1 (fapply f l) c2 v) (p' :: lp2)) by (simpl; tauto).
@@ -1030,7 +1029,7 @@ destruct eq_nat_dec as [Heq | Hneq] in Hfagr.
           destruct lp1; destruct lp2; simpl in Heq; try tauto.
           - inversion Heq; subst.
               contradict Hneqp'.
-              apply activations_strict; assumption.
+              apply ℐᵃ_strict; assumption.
 
           - inversion Heq.
 
@@ -1038,33 +1037,33 @@ destruct eq_nat_dec as [Heq | Hneq] in Hfagr.
 
           - inversion Heq; subst.
               eapply FA_path_activation with (lp := lp1) ; [exact Hwf | | simpl in *; tauto].
-              apply first_activations_incl_activations; assumption.
+              apply first_activations_incl_ℐᵃ; assumption.
         }
 Qed.
 
 Lemma first_activations_at_given_rank_lt_previous i s p c1 t c2 v p':
-  let proof_tree := cbv_update i s p c1 t c2 v in
+  let π := cbv_update i s p c1 t c2 v in
   PPO_prog ->
-  wf proof_tree ->
-  In p' (first_activations_at_given_rank (activation_rank rank p') proof_tree) ->
-  activation_rank rank p' < activation_rank rank proof_tree ->
-  exists p'', In p'' (activations proof_tree) /\
+  wf π ->
+  In p' (first_activations_at_given_rank (activation_rank rank p') π) ->
+  activation_rank rank p' < activation_rank rank π ->
+  exists p'', In p'' (ℐᵃ π) /\
          In p' (first_activations p'') /\
          activation_rank rank p' < activation_rank rank p''.
 Proof.
-intros proof_tree HPPO Hwf Hp' Hlt.
+intros π HPPO Hwf Hp' Hlt.
 destruct (first_activation_down p' i s p c1 t c2 v) as (p'' & H); trivial.
 
 - contradict Hlt.
   subst.
   simpl; omega.
 
-- apply first_activations_at_given_rank_activations in Hp'.
+- apply first_activations_at_given_rank_ℐᵃ in Hp'.
   assumption.
 
 - exists p''.
   repeat split; try tauto.
-  unfold proof_tree in Hwf.
+  unfold π in Hwf.
   eapply first_activation_down_rank_lt with i s p c1 t c2 v; try tauto.
 Qed.
 
@@ -1075,25 +1074,25 @@ induction t using term_ind2; simpl.
    trivial.
 
   - do 2 rewrite length_flat_map.
-    repeat rewrite map_map. 
+    repeat rewrite map_map.
     apply suml_map_le.
     intros x Hx.
     apply H; assumption.
 
   - apply le_n_S.
     do 2 rewrite length_flat_map.
-    repeat rewrite map_map. 
+    repeat rewrite map_map.
     apply suml_map_le.
     intros x Hx.
     apply H; assumption.
 Qed.
 
-Lemma first_activations_length_le_first_and_semi_activations n s p c1 f l c2 v : length (first_activations (cbv_update n s p c1 (@fapply variable function constructor f l) c2 v)) <=
+Lemma first_activations_length_le_first_and_semi_ℐᵃ n s p c1 f l c2 v : length (first_activations (cbv_update n s p c1 (@fapply variable function constructor f l) c2 v)) <=
 length (first_activations_and_semi (cbv_update n s p c1 (fapply f l) c2 v)).
 Proof.
 simpl.
 induction p using cbv_ind2; simpl.
-- do 2 rewrite length_flat_map. 
+- do 2 rewrite length_flat_map.
   repeat rewrite map_map.
   apply suml_map_le.
   apply H.
@@ -1102,7 +1101,7 @@ induction p using cbv_ind2; simpl.
   apply plus_le_compat.
   + assumption.
 
-  + do 2 rewrite length_flat_map. 
+  + do 2 rewrite length_flat_map.
     repeat rewrite map_map.
     apply suml_map_le.
     apply H.
@@ -1117,7 +1116,7 @@ Lemma degree_bounded p :
 Proof.
   intro Wfp.
   assert( H : forall p0 : cbv,
-  InCBV p0 p -> length (first_activations p0) <= max_nb_rhs_functions prog); 
+  InCBV p0 p -> length (first_activations p0) <= max_nb_rhs_functions prog);
   [| apply H; apply InCBV_refl].
   induction p using cbv_ind2; intros p0 Hin; simpl in Hin.
   - destruct Hin as [Heq | Hneq].
@@ -1166,7 +1165,7 @@ Proof.
         { transitivity (length (fapplies_in_term (subst s t))).
           - rewrite <- Hres.
             replace (first_activations_and_semi_rec p) with (first_activations_and_semi (cbv_update n s p c1 (fapply f l) c2 v)) by trivial.
-            apply first_activations_length_le_first_and_semi_activations.
+            apply first_activations_length_le_first_and_semi_ℐᵃ.
 
           - apply length_fapplies_le_functions.
         }
@@ -1196,12 +1195,12 @@ Proof.
     + tauto.
 Qed.
 
-Lemma split_activations_by_first_activations_at_rank rk p :
+Lemma split_ℐᵃ_by_first_activations_at_rank rk p :
   wf p ->
-  activations_at_rank rk p = flat_map (activations_at_rank rk) (first_activations_at_given_rank rk p).
+  ℐᵃ_at_rank rk p = flat_map (ℐᵃ_at_rank rk) (first_activations_at_given_rank rk p).
 Proof.
 intro Hwf.
-unfold activations_at_rank.
+unfold ℐᵃ_at_rank.
 induction p as [ lp c1 t c2 v IHlp | lp p' c1 t c2 v IHlp IHp | i s p' c1 t c2 v IHp | c t v ]
  using cbv_ind2; simpl; trivial.
 
@@ -1211,7 +1210,7 @@ induction p as [ lp c1 t c2 v IHlp | lp p' c1 t c2 v IHlp IHp | i s p' c1 t c2 v
     apply flat_map_in_ext.
     intros p Hp.
     apply IHlp; trivial.
-    apply wf_InCBV_wf with (proof_tree := cbv_constr lp c1 t c2 v); trivial.
+    apply wf_InCBV_wf with (π := cbv_constr lp c1 t c2 v); trivial.
     simpl.
     right.
     apply orl_map.
@@ -1232,7 +1231,7 @@ induction p as [ lp c1 t c2 v IHlp | lp p' c1 t c2 v IHlp IHp | i s p' c1 t c2 v
     apply flat_map_in_ext.
     intros p Hp.
     apply IHlp; trivial.
-    apply wf_InCBV_wf with (proof_tree := cbv_split lp p' c1 t c2 v); trivial.
+    apply wf_InCBV_wf with (π := cbv_split lp p' c1 t c2 v); trivial.
     simpl.
     right.
     right.
@@ -1258,7 +1257,7 @@ induction p as [ lp c1 t c2 v IHlp | lp p' c1 t c2 v IHlp IHp | i s p' c1 t c2 v
       rewrite length_flat_map, suml_app.
       trivial.
 
-    * apply wf_InCBV_wf with (proof_tree := cbv_split lp p' c1 t c2 v); trivial.
+    * apply wf_InCBV_wf with (π := cbv_split lp p' c1 t c2 v); trivial.
       simpl.
       right.
       left.
@@ -1278,7 +1277,7 @@ induction p as [ lp c1 t c2 v IHlp | lp p' c1 t c2 v IHlp IHp | i s p' c1 t c2 v
 
     * intros _.
       apply IHp.
-      apply wf_InCBV_wf with (proof_tree := cbv_update i s p' c1 (fapply f lv) c2 v); trivial.
+      apply wf_InCBV_wf with (π := cbv_update i s p' c1 (fapply f lv) c2 v); trivial.
       simpl.
       right.
       apply InCBV_refl.
@@ -1290,17 +1289,17 @@ Proof.
  intro Hnin.
  destruct xs.
  - trivial.
- 
+
  - elim (Hnin a).
    apply in_eq.
 Qed.
 
-Lemma activations_at_rank_activation_rank proof_tree p:
-  In p (activations proof_tree) ->
-  In p (activations_at_rank (activation_rank rank p) proof_tree).
+Lemma ℐᵃ_at_rank_activation_rank π p:
+  In p (ℐᵃ π) ->
+  In p (ℐᵃ_at_rank (activation_rank rank p) π).
 Proof.
-unfold activations_at_rank.
-induction (activations proof_tree) as [ | p' lp IH]; trivial.
+unfold ℐᵃ_at_rank.
+induction (ℐᵃ π) as [ | p' lp IH]; trivial.
 simpl.
 intros [ H | H ].
 
@@ -1313,17 +1312,16 @@ intros [ H | H ].
 Qed.
 
 Lemma first_activations_at_given_rank_incl i s p c1 t c2 v r :
-  let proof_tree := cbv_update i s p c1 t c2 v in
+  let π := cbv_update i s p c1 t c2 v in
   PPO_prog ->
-  wf proof_tree ->
-  r < activation_rank rank proof_tree ->
-  incl (first_activations_at_given_rank r proof_tree)
+  wf π ->
+  r < activation_rank rank π ->
+  incl (first_activations_at_given_rank r π)
        (flat_map (@first_activations _ _ _)
-                 (flat_map (fun r' => activations_at_rank r' proof_tree)
+                 (flat_map (fun r' => ℐᵃ_at_rank r' π)
                            (seq (1 + r) (max_rank - r)))).
 Proof.
-  (* utilise first_activations_at_given_rank_lt_previous *)
-intros proof_tree PPO_prog Hwf Hlt p' Hp'.
+intros π PPO_prog Hwf Hlt p' Hp'.
 assert (Hr: r = activation_rank rank p').
 {
   eapply first_activations_at_given_rank_rank.
@@ -1351,7 +1349,7 @@ split.
   }
   omega.
 
-- apply activations_at_rank_activation_rank; trivial.
+- apply ℐᵃ_at_rank_activation_rank; trivial.
 Qed.
 
 Definition compatible_rule (r:rule) : Prop :=
@@ -1393,41 +1391,41 @@ apply PPO_is_compatible_rule;auto.
 Qed.
 
 Lemma gary_seven i s p c1 f lt c2 v:
-  let proof_tree := cbv_update i s p c1 (fapply f lt) c2 v in
+  let π := cbv_update i s p c1 (fapply f lt) c2 v in
   compatible_prog ->
-  wf proof_tree ->
+  wf π ->
   PPO_prog ->
-  length (activations proof_tree) <= gary_seven_poly (A_T proof_tree).
+  𝓐 π <= gary_seven_poly (A_T π).
 Proof.
-intros proof_tree Hcompat Hwf Hppoprog.
+intros π Hcompat Hwf Hppoprog.
 assert (H :
   forall r, r <= max_rank ->
-  length(activations_at_rank r proof_tree) <=
-  activations_at_rank_bound (A_T proof_tree) r
+  length(ℐᵃ_at_rank r π) <=
+  ℐᵃ_at_rank_bound (A_T π) r
 ). {
   intro r.
   remember (max_rank - r) as n.
-  revert i s p c1 f lt c2 v proof_tree Hwf r Heqn.
-  induction n as [ n IH ] using lt_wf_ind; intros i s p c1 f lt c2 v proof_tree Hwf r Heqn Hr.
-  case(eq_nat_dec r (activation_rank rank proof_tree)) as [Heq | Hneq].
-  - transitivity (A_T proof_tree).
+  revert i s p c1 f lt c2 v π Hwf r Heqn.
+  induction n as [ n IH ] using lt_wf_ind; intros i s p c1 f lt c2 v π Hwf r Heqn Hr.
+  case(eq_nat_dec r (activation_rank rank π)) as [Heq | Hneq].
+  - transitivity (A_T π).
     + subst r.
       apply A_T_activation_rank.
       simpl.
       destruct (eq_nat_dec (rank f) (rank f)) as [Heq | Hneq];
       [ apply in_eq | tauto].
 
-    + unfold activations_at_rank_bound.
-      transitivity (A_T proof_tree ^ S (max_rank - r)).
+    + unfold ℐᵃ_at_rank_bound.
+      transitivity (A_T π ^ S (max_rank - r)).
       * simpl.
-        case (eq_nat_dec 0 (A_T proof_tree)).
+        case (eq_nat_dec 0 (A_T π)).
           intro He; rewrite <- He.
           trivial.
 
           intro Hneq.
-          rewrite <- (mult_1_r (A_T proof_tree)) at 1.
+          rewrite <- (mult_1_r (A_T π)) at 1.
           apply mult_le_compat_l.
-          destruct (A_T proof_tree); try tauto.
+          destruct (A_T π); try tauto.
           simpl.
           apply lt_0_pow; omega.
 
@@ -1436,14 +1434,14 @@ assert (H :
         rewrite <- mult_1_l at 1.
         apply mult_le_compat; auto using (pos_max_rank) with * .
 
-  - destruct (lt_eq_lt_dec r (activation_rank rank proof_tree)) as [ [ Hlt | Heq ] | Hgt ].
+  - destruct (lt_eq_lt_dec r (activation_rank rank π)) as [ [ Hlt | Heq ] | Hgt ].
 
     + clear Hneq.
-      fold (activations_at_rank r proof_tree).
-      rewrite split_activations_by_first_activations_at_rank; [ | trivial ].
+      fold (ℐᵃ_at_rank r π).
+      rewrite split_ℐᵃ_by_first_activations_at_rank; [ | trivial ].
       rewrite length_flat_map.
       rewrite map_map.
-      transitivity (length (map (fun x => length (activations_at_rank r x)) (first_activations_at_given_rank r proof_tree)) * A_T proof_tree).
+      transitivity (length (map (fun x => length (ℐᵃ_at_rank r x)) (first_activations_at_given_rank r π)) * A_T π).
 
       * apply suml_le_len_times_bound.
         intros x Hin.
@@ -1451,12 +1449,12 @@ assert (H :
         destruct Hin as ( p' & Heq & Hin ).
         subst x.
         assert( Hreq : r = activation_rank rank p') by
-        (apply first_activations_at_given_rank_rank with proof_tree; assumption).
-        subst r.  
+        (apply first_activations_at_given_rank_rank with π; assumption).
+        subst r.
         apply A_T_activation_rank.
         assumption.
 
-      * unfold activations_at_rank_bound.
+      * unfold ℐᵃ_at_rank_bound.
         simpl Nat.pow at 3.
         ring_simplify.
         rewrite mult_comm.
@@ -1480,13 +1478,13 @@ assert (H :
                apply degree_bounded.
                apply in_flat_map in Hin.
                destruct Hin as ( r' & _ & Hin ).
-               apply activations_at_rank_wf with (rk := r') (p := proof_tree);
+               apply ℐᵃ_at_rank_wf with (rk := r') (p := π);
                assumption.
 
             + rewrite map_length, length_flat_map, map_map.
-              fold proof_tree.
+              fold π.
               transitivity (suml
-                              (map (fun x : nat => activations_at_rank_bound (A_T proof_tree) x)
+                              (map (fun x : nat => ℐᵃ_at_rank_bound (A_T π) x)
                                    (seq (1 + r) (max_rank - r))) * max_nb_rhs_functions prog).
 
               * apply mult_le_compat_r.
@@ -1494,11 +1492,11 @@ assert (H :
                 intros r' Hin.
                 apply in_seq in Hin; destruct Hin as ( Hltr & Hler ).
                 assert ( Hle_max: r < max_rank ).
-                { apply lt_le_trans with (m := activation_rank rank proof_tree); simpl; trivial. }
+                { apply lt_le_trans with (m := activation_rank rank π); simpl; trivial. }
                 apply IH with (m := max_rank - r'); trivial; omega.
 
-              * unfold activations_at_rank_bound.
-                assert (H_A_T: A_T proof_tree <> 0).
+              * unfold ℐᵃ_at_rank_bound.
+                assert (H_A_T: A_T π <> 0).
                 {
                   unfold A_T.
                   apply all_maxl; [simpl; congruence | ].
@@ -1511,7 +1509,7 @@ assert (H :
                   subst p'.
                   simpl.
                   destruct t as [ | | f' lv]; simpl; try congruence.
-                  unfold activations_at_rank.
+                  unfold ℐᵃ_at_rank.
                   simpl.
                   rewrite <- beq_nat_refl.
                   simpl.
@@ -1522,7 +1520,7 @@ assert (H :
                                      (fun x : nat =>
                                         Nat.pow max_rank (max_rank - (1+r)) *
                                         Nat.pow (max 1 (max_nb_rhs_functions prog)) (max_rank - (1+r)) *
-                                        Nat.pow (A_T proof_tree) (max_rank - r))
+                                        Nat.pow (A_T π) (max_rank - r))
                                      (seq (1 + r) (max_rank - r))) * max_nb_rhs_functions prog).
                   - apply mult_le_compat_r.
                     apply suml_map_le.
@@ -1537,12 +1535,12 @@ assert (H :
                   - rewrite suml_map_const, seq_length.
                     replace (Nat.pow max_rank (max_rank - (1 + r)) *
                              Nat.pow (max 1 (max_nb_rhs_functions prog)) (max_rank - (1 + r)) *
-                             Nat.pow (A_T proof_tree) (max_rank - r) *
+                             Nat.pow (A_T π) (max_rank - r) *
                              (max_rank - r) * max_nb_rhs_functions prog)
                             with
                             ((Nat.pow max_rank (max_rank - (1 + r)) * (max_rank - r))
                              * ((Nat.pow (max 1 (max_nb_rhs_functions prog)) (max_rank - (1 + r)) * max_nb_rhs_functions prog)
-                                * Nat.pow (A_T proof_tree) (max_rank - r)));
+                                * Nat.pow (A_T π) (max_rank - r)));
                       [ | ring ].
                     apply mult_le_compat; [ | apply mult_le_compat ]; trivial.
 
@@ -1577,7 +1575,7 @@ assert (H :
                         }
 
                       * subst r.
-                        change (activation_rank rank proof_tree) with (rank f) in Hlt.
+                        change (activation_rank rank π) with (rank f) in Hlt.
                         contradict Hlt.
                         apply le_not_lt.
                         apply max_rank_is_max_rank.
@@ -1586,30 +1584,31 @@ assert (H :
 
     + contradiction.
 
-    + replace (activations_at_rank r proof_tree) with ([]: list cbv);
+    + replace (ℐᵃ_at_rank r π) with ([]: list cbv);
       [ apply le_0_n | ].
       apply notin_nil.
       intros r' Hin.
-      unfold activations_at_rank in Hin.
+      unfold ℐᵃ_at_rank in Hin.
       apply filter_In in Hin.
       destruct Hin as [ Hin Heq ].
       apply beq_nat_true_iff in Heq; subst r.
       apply PPO_activation_rank_decreasing in Hin; try trivial.
-      change (rank f) with (activation_rank rank proof_tree) in Hin.
+      change (rank f) with (activation_rank rank π) in Hin.
       omega.
 }
-replace (length(activations proof_tree)) with
-  (suml (map (fun r => length(activations_at_rank r proof_tree)) (seq 0 (S max_rank)))).
+unfold 𝓐.
+replace (length(ℐᵃ π)) with
+  (suml (map (fun r => length(ℐᵃ_at_rank r π)) (seq 0 (S max_rank)))).
 - unfold gary_seven_poly.
   apply suml_map_le.
   intros r Hr.
   rewrite In_seq in Hr.
   auto with *.
 
-- unfold activations_at_rank.
+- unfold ℐᵃ_at_rank.
   transitivity (
     suml (map
-     (fun r : nat => length (filter (beq_nat r) (map (activation_rank rank) (activations proof_tree))))
+     (fun r : nat => length (filter (beq_nat r) (map (activation_rank rank) (ℐᵃ π))))
      (seq 0 (S max_rank)))
   ). {
     do 2 f_equal.
@@ -1632,12 +1631,12 @@ Qed.
 
 (* Proposition 8 *)
 
-Lemma all_functions_in_prog (function_default : function) (proof_tree: cbv) :
-  wf proof_tree ->
-  forall p, In p (activations proof_tree) ->
+Lemma all_functions_in_prog (function_default : function) (π: cbv) :
+  wf π ->
+  forall p, In p (ℐᵃ π) ->
        In (activation_function function_default p) (functions_of_prog prog).
 Proof.
-  induction proof_tree using cbv_ind2; intros Hwf p Hp.
+  induction π using cbv_ind2; intros Hwf p Hp.
     - simpl in Hp. apply in_flat_map in Hp.
       destruct Hp as [y [Hy Hp]].
       apply H with y; try auto.
@@ -1647,7 +1646,7 @@ Proof.
          exists y; split; trivial.
          apply InCBV_refl.
 
-    - assert (wf proof_tree);[eapply wf_InCBV_wf; [eauto |  right; left; apply InCBV_refl]|].
+    - assert (wf π);[eapply wf_InCBV_wf; [eauto |  right; left; apply InCBV_refl]|].
        apply in_app_or in Hp; destruct Hp.
         + auto.
 
@@ -1658,7 +1657,7 @@ Proof.
           * apply Hwf.
           * right; right; apply orl_map; eauto using InCBV_refl.
 
-    - assert (wf proof_tree);[eapply wf_InCBV_wf; [ apply Hwf | right; auto using InCBV_refl]|].
+    - assert (wf π);[eapply wf_InCBV_wf; [ apply Hwf | right; auto using InCBV_refl]|].
       destruct Hp.
       + rewrite <- H0 in *.
         destruct t; intros.
@@ -1666,8 +1665,7 @@ Proof.
 
         * inversion Hwf.
 
-        * (* functions_of_prog intervient ici *)
-          destruct Hwf as [_ [ll [t [Hlen [Hin _]]]]].
+        * destruct Hwf as [_ [ll [t [Hlen [Hin _]]]]].
           apply in_map_iff.
           exists (rule_intro f ll t).
           split.
@@ -1681,7 +1679,7 @@ Proof.
     - inversion Hp.
 Qed.
 
-(* liens entre PPO et sous-terme *)
+(* Links between PPO and sub-term *)
 
 Fixpoint sub_terms (t: term) : list term :=
   t :: match t with
@@ -1712,7 +1710,7 @@ Lemma sub_term_eq_or_strict (t1 t2: term) :
 Proof.
   split.
 
-  - (* sous-terme → égal ou strict *)
+  - (* -> *)
     intros Hin.
     destruct t2 as [ v | c lt | f lt ];
       simpl in *;
@@ -1720,7 +1718,7 @@ Proof.
         [left; symmetry | right ];
         assumption ).
 
-  - (* égal ou strict → sous-terme *)
+  - (* <- *)
     intros H; destruct H as [ Heq | Hin ].
 
     + subst t2; destruct t1; simpl; left; trivial.
@@ -1775,7 +1773,7 @@ Proof.
   destruct t as [ | c lt | f lt ];
   try (simpl; tauto).
 
-  - assert (Hobv: Forall (fun t => term_size t < term_size (capply c lt)) lt).
+  - assert (Hobv: Forall (fun t => term_size t < ╎capply c lt╎) lt).
     {
       simpl.
       induction lt as [ | t lt IH ];
@@ -1802,7 +1800,7 @@ Proof.
     + generalize (lt_trans _ _ _ Hinlt Hlt).
       apply lt_irrefl.
 
-  - assert (Hobv: Forall (fun t => term_size t < term_size (fapply f lt)) lt).
+  - assert (Hobv: Forall (fun t => term_size t < ╎fapply f lt╎) lt).
     {
       simpl.
       induction lt as [ | t lt IH ];
@@ -1853,7 +1851,7 @@ Proof.
   intros Hval.
   split.
 
-  - (* PPO → sous-terme *)
+  - (* -> *)
     revert t Hval.
     induction v as [ | c lt IH | ] using term_ind2;
       try (simpl; intros; exfalso; assumption).
@@ -1873,7 +1871,7 @@ Proof.
       apply in_map.
       assumption.
 
-  - (* sous-terme → PPO *)
+  - (* <- *)
     revert t Hval.
     induction v as [ | c lt IH | ] using term_ind2;
       intros t Hval Hin; try (simpl in Hval; exfalso; assumption).
@@ -2004,21 +2002,21 @@ induction HPPO.
      auto with *.
 Qed.
 
-  (* Toute activation de même rang doit être un « sous-terme » *)
+  (* Every activation at same rank must be sub-term *)
 Lemma  all_possible_sub_activation_same_rank_spec p' i s p c1 f lt c2 v:
-  PPO_prog -> 
-  let proof_tree := cbv_update i s p c1 (fapply f lt) c2 v in
-  wf proof_tree ->
-  In p' (activations proof_tree) ->
+  PPO_prog ->
+  let π := cbv_update i s p c1 (fapply f lt) c2 v in
+  wf π ->
+  In p' (ℐᵃ π) ->
   activation_rank rank p' = rank f ->
   In (proj_left p') (all_possible_sub_activation_same_rank f lt).
 Proof.
-intros HPPO proof_tree Hwf Hin Hrank.
+intros HPPO π Hwf Hin Hrank.
 unfold all_possible_sub_activation_same_rank.
-assert (Hwf' : wf p') by (apply (activations_wf Hwf) ; trivial).
+assert (Hwf' : wf p') by (apply (ℐᵃ_wf Hwf) ; trivial).
 generalize Hin; intro Hpact.
-assert (Hppo : p' = proof_tree \/ PPO rank (proj_left p') (proj_left proof_tree)) by
-  (unfold proof_tree; eapply PPO_activations; eauto).
+assert (Hppo : p' = π \/ PPO rank (proj_left p') (proj_left π)) by
+  (unfold π; eapply PPO_ℐᵃ; eauto).
 apply activation_is_function in Hpact.
 destruct Hpact as (i' & s' & p'' & c1' & t'' & c2' & v'' & Heq).
 subst p'.
@@ -2027,7 +2025,7 @@ destruct t''; try tauto.
 apply in_flat_map; exists f0.
 split.
 - replace f0 with (activation_function f0 (cbv_update i' s' p'' c1' (fapply f0 l) c2' v'')) by trivial.
-  apply all_functions_in_prog with proof_tree; assumption.
+  apply all_functions_in_prog with π; assumption.
 
 - apply in_map_iff; exists l.
   split; trivial.
@@ -2051,7 +2049,7 @@ split.
 
     * omega.
 
-    * { (* cas principal *)
+    * { (* main case *)
         apply PPO_value_all_possible_subarguments.
         - intros x Hx.
            apply in_map_iff in Hx.
@@ -2066,32 +2064,31 @@ Qed.
 
 Definition bobby_eight_poly x := length (functions_of_prog prog) * Nat.pow x max_arity.
 
-(* lemma 64 *)
 Lemma bobby_eight i s p c1 f lt c2 v:
-  let proof_tree := cbv_update i s p c1 (fapply f lt) c2 v in
-  PPO_prog -> wf proof_tree ->
-  length (activations_at_rank (rank f) proof_tree) <=
-  bobby_eight_poly (term_size (proj_left proof_tree)).
+  let π := cbv_update i s p c1 (fapply f lt) c2 v in
+  PPO_prog -> wf π ->
+  length (ℐᵃ_at_rank (rank f) π) <=
+  bobby_eight_poly (╎proj_left π╎).
 Proof.
-intros proof_tree HPPO Hwf.
+intros π HPPO Hwf.
 
-unfold activations_at_rank.
+unfold ℐᵃ_at_rank.
 
 transitivity (length (all_possible_sub_activation_same_rank f lt)).
-- replace (length (filter (fun g : cbv => rank f =? activation_rank rank g) (activations proof_tree))) with
-  (length (filter (fun t => rank f =? match t with 
+- replace (length (filter (fun g : cbv => rank f =? activation_rank rank g) (ℐᵃ π))) with
+  (length (filter (fun t => rank f =? match t with
     | fapply g _ => rank g
-    | _ => 0 end) (map (fun p => proj_left p) (activations proof_tree)))).
+    | _ => 0 end) (map (fun p => proj_left p) (ℐᵃ π)))).
   + apply NoDup_incl_le_length.
     apply NoDup_filter.
-    * apply NoDup_left_activations; trivial.
+    * apply NoDup_left_ℐᵃ; trivial.
 
     * intros t Ht.
        apply filter_In in Ht; destruct Ht as (Hin & Hrank).
        apply in_map_iff in Hin; destruct Hin as (p' & Hp' & Hpact).
        subst t.
        eapply all_possible_sub_activation_same_rank_spec; eauto.
-       assert (Hwf' : wf p') by (apply (activations_wf Hwf) ; trivial).
+       assert (Hwf' : wf p') by (apply (ℐᵃ_wf Hwf) ; trivial).
        apply activation_is_function in Hpact.
        destruct Hpact as (i' & s' & p'' & c1' & t'' & c2' & v'' & Heq).
        subst p'.
@@ -2104,7 +2101,7 @@ transitivity (length (all_possible_sub_activation_same_rank f lt)).
     erewrite filter_ext_In; [reflexivity|].
     intros p' Hin.
     simpl.
-    assert (Hwf' : wf p') by (apply (activations_wf Hwf) ; trivial). 
+    assert (Hwf' : wf p') by (apply (ℐᵃ_wf Hwf) ; trivial).
     apply activation_is_function in Hin.
    destruct Hin as (i' & s' & p'' & c1' & t'' & c2' & v'' & Heq).
    subst; simpl; trivial.
@@ -2113,17 +2110,17 @@ transitivity (length (all_possible_sub_activation_same_rank f lt)).
     [(apply all_possible_sub_activation_same_rank_bound)|].
   unfold bobby_eight_poly.
   apply mult_le_compat_l.
-  transitivity (term_size (proj_left proof_tree) ^ (length (map (term_size (constructor:=constructor)) lt))).
+  transitivity (╎proj_left π╎ ^ (length (map (term_size (constructor:=constructor)) lt))).
   + apply prodl_bound.
     intros x Hx.
-    unfold proof_tree; simpl.
+    unfold π; simpl.
     apply le_S, in_le_suml; trivial.
 
   + apply Nat.pow_le_mono_r.
-    * pose (gt_term_size_O (proj_left proof_tree)); omega.
+    * pose (gt_term_size_O (proj_left π)); omega.
 
     * rewrite map_length.
-       unfold proof_tree in Hwf.
+       unfold π in Hwf.
        simpl in Hwf.
        decompose record Hwf.
        assumption.
@@ -2138,19 +2135,19 @@ apply Mult.mult_le_compat_l.
 apply pow_le_compat;trivial.
 Qed.
 
-(* Theorem 65 *)
-Theorem A_T_bound i s p c1 f lt c2 v: 
-  let proof_tree := cbv_update i s p c1 (fapply f lt) c2 v in
-  PPO_prog -> wf proof_tree ->
-  A_T proof_tree <= bobby_eight_poly (max_active_size proof_tree).
+(** Theorem 7 *)
+Theorem A_T_bound i s p c1 f lt c2 v:
+  let π := cbv_update i s p c1 (fapply f lt) c2 v in
+  PPO_prog -> wf π ->
+  A_T π <= bobby_eight_poly (𝓢 π).
 Proof.
 intros.
 unfold A_T.
-apply le_trans with (m:=maxl (map (fun pi => bobby_eight_poly (term_size (proj_left pi))) (activations proof_tree))).
+apply le_trans with (m:=maxl (map (fun pi => bobby_eight_poly (╎proj_left pi╎)) (ℐᵃ π))).
 - apply maxl_le_maxl.
   intros.
   assert (wf x).
-  + apply activations_wf with (proof_tree := proof_tree);trivial.
+  + apply ℐᵃ_wf with (π := π);trivial.
   + apply activation_is_function in H1.
     destruct H1 as (i0 & s0 & p' & c0 & t & c3 & v0 & x_is_upd).
     unfold activation_rank.
@@ -2166,9 +2163,9 @@ apply le_trans with (m:=maxl (map (fun pi => bobby_eight_poly (term_size (proj_l
   destruct H1 as (x0 & bob & act).
   subst x.
   apply bobby_increase.
-  apply le_trans with (m:= (term_size (proj_left x0)) + (value_size (proj_right x0))).
+  apply le_trans with (m:= (╎proj_left x0╎) + (value_size (proj_right x0))).
   + apply Plus.le_plus_l.
-  + apply le_max_active_size;trivial.
+  + apply le_𝓢;trivial.
 Qed.
 
 End Bounds.

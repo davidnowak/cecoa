@@ -1,3 +1,4 @@
+(** * Programs as Term Rewriting Systems *)
 Require Import Bool Arith Max List.
 Import List.ListNotations.
 Require Import Omega.
@@ -8,7 +9,7 @@ Unset Strict Implicit.
 
 Section Syntax.
 
-(* AST *)
+(** ** Syntax *)
 
 Variables variable function constructor : Type.
 Variable max_arity : nat.
@@ -28,8 +29,9 @@ Inductive pattern : Type :=
 Inductive rule : Type :=
 | rule_intro : function -> list pattern -> term -> rule.
 
-(* Smarter induction principles than the ones automatically generated *)
+(** Smarter induction principles than the ones automatically generated *)
 
+(* behin hide *)
 Lemma value_ind2_gen :
   forall (P : value -> Type)(Q : list value -> Type),
   Q nil ->
@@ -53,6 +55,10 @@ fix H1 6; intros P Q H2 H3 H4 [c l]; apply H4; revert l; fix H5 1; intros [ | v 
 
   + apply H5.
 Qed.
+
+(* end hide *)
+
+(* behin hide *)
 
 Lemma term_ind2_gen :
   forall (P : term -> Prop)(Q : list term -> Prop),
@@ -106,6 +112,8 @@ fix H1 8; intros P Q H2 H3 H4 H5 H6 [ x | c l | f l ].
 
     * apply H7.
 Qed.
+(* end hide *)
+
 
 Lemma term_ind2 :
   forall (P : term -> Prop),
@@ -123,6 +131,7 @@ clear H1 H2 H3 t; intros t1 l H1 H2 t2 [H3 | H3].
 - auto.
 Qed.
 
+(* behin hide *)
 Lemma pattern_ind2_gen :
   forall (P : pattern -> Prop)(Q : list pattern -> Prop),
   Q nil ->
@@ -153,6 +162,8 @@ fix H1 7; intros P Q H2 H3 H4 H5 [ x | c l ].
 
     * apply H6.
 Qed.
+(* end hide *)
+
 
 Lemma pattern_ind2 :
   forall (P : pattern -> Prop),
@@ -169,7 +180,7 @@ clear H1 H2 p; intros p1 l H1 H2 p2 [H3 | H3].
 - auto.
 Qed.
 
-(* Boolean equalities for syntax *)
+(** ** Boolean equalities for syntax *)
 
 Variable variable_eq_dec : forall (x1 x2 : variable), {x1=x2}+{x1<>x2}.
 
@@ -286,7 +297,7 @@ try (split; congruence).
   + firstorder.
 Qed.
 
-(* Automatic conversion of a [value] or [pattern] into a [term] *)
+(** ** Automatic conversion of a [value] or [pattern] into a [term] *)
 
 Fixpoint pattern_from_value (v : value) : pattern  :=
   match v with
@@ -363,7 +374,6 @@ Proof.
 intros v x; destruct v; simpl; congruence.
 Qed.
 
-(* Doit-on définir explicitement term_value ? *)
 Fixpoint term_value (t: term) : Prop :=
   match t with
     | capply _ lt => andl (map term_value lt)
@@ -419,7 +429,7 @@ induction t as [ | c lt IH | ] using term_ind2.
   + intros Himp; destruct Himp as [ v Himp ]; destruct v; discriminate.
 Qed.
 
-(* Well-formedness of a program *)
+(** ** Well-formedness of a program *)
 
 Fixpoint vars_of_term (t : term) : list variable :=
   match t with
@@ -516,6 +526,7 @@ Definition rule_vars_defined (r : rule) : Prop :=
 Definition wf_prog (prog : list rule) : Prop :=
   andl (map rule_vars_defined prog) /\ max_arity_prog prog <= max_arity.
 
+(** **  Substitutions *)
 Fixpoint subst (s : variable -> value)(t : term) : term :=
   match t with
   | var x => s x
@@ -546,7 +557,7 @@ f_equal.
   intros; apply IH1; simpl; tauto.
 Qed.
 
-(* Sizes *)
+(** ** Size and subterms *)
 
 Fixpoint value_size (v : value) : nat :=
   match v with
@@ -559,6 +570,7 @@ Fixpoint term_size (t : term) :=
   | capply _ lt => 1 + suml (map term_size lt)
   | fapply _ lt => 1 + suml (map term_size lt)
   end.
+Notation "'╎' t '╎'" := (term_size t) (at level 40).
 
 Lemma gt_term_size_O t : term_size t > 0.
 Proof.
@@ -567,7 +579,7 @@ Qed.
 
 Lemma in_capply_term_size_lt c (t : term) lt :
   In t lt ->
-  term_size t < term_size (capply c lt).
+  ╎t╎ < ╎capply c lt╎.
 Proof.
 simpl.
 induction lt as [ | t' lt IH ]; simpl; try tauto.
@@ -582,7 +594,7 @@ Qed.
 
 Lemma in_fapply_term_size_lt f (t : term) lt :
   In t lt ->
-  term_size t < term_size (fapply f lt).
+  ╎t╎ < ╎fapply f lt╎.
 Proof.
 simpl.
 induction lt as [ | t' lt IH ]; simpl; try tauto.
@@ -595,32 +607,19 @@ intros [ H | H ].
   omega.
 Qed.
 
-(* Right-hand side of a rule *)
+(** Right-hand side of a rule *)
 
 Definition rhs_of_rule (r : rule) : term :=
   match r with rule_intro _ _ t => t end.
 
-(* Injecte les membres gauches des règles dans les term *)
+(** Term from the right-hand side of a rule *)
 Definition lhs_of_rule (r : rule) : term :=
   match r with rule_intro f lp _ => fapply f (map term_from_pattern lp) end.
 
 Definition max_rhs (prog : list rule) : nat :=
   maxl (map term_size (map rhs_of_rule prog)).
 
-(* This lemma corresponds to the first four lines of the proof of Proposition 4. *)
-(* Une règle bien formée contient uniquement des variables qui sont dans les motifs.
-
-Soit un arbre de preuve bien formé et un programme.
-Pour chaque activation, montrons que |rs| ≤ activation_bound p
-Pour ça, calculons la taille de rs.
-|rs| ≤ |r| (1+ plus grand substitut d’une variable) car |rs| contient au plus |r| variables.
-(Lemme pour prouver ça)
-par ailleurs « plus grand substitut d’une variable » ≤ |t| pour toutes les variables de r car :
-le programme est bien formé, donc les variables de r apparaissent dans les motifs, donc la substitution
-les fait correspondre à des sous-termes de t (lemme : un sous-terme a une taille inférieure ?)
-*)
-
-Lemma compatible_sizes: forall v, term_size (term_from_value v) = value_size v.
+Lemma compatible_sizes: forall v, ╎term_from_value v╎ = value_size v.
 Proof.
 induction v as [c lv IH] using value_ind2;
 simpl; do 2 f_equal; rewrite map_map; apply map_in_ext; trivial.
@@ -648,7 +647,7 @@ apply in_map.
 apply (H_incl var H_var_in_t).
 Qed.
 
-Lemma step_one: forall s t, term_size (subst s t) <= term_size t * (1 + max_size_image_subst t s).
+Lemma step_one: forall s t, ╎subst s t╎ <= ╎t╎ * (1 + max_size_image_subst t s).
 Proof.
 intros s t; induction t as [ x | c lt IH | f lt IH ] using term_ind2.
 
@@ -663,7 +662,7 @@ intros s t; induction t as [ x | c lt IH | f lt IH ] using term_ind2.
     * apply plus_le_compat_l; apply IH.
 
     * { clear IH; unfold max_size_image_subst; simpl; do 2 rewrite map_app; rewrite maxl_app.
-      set (w := term_size t);
+      set (w := ╎t╎);
       set (x:= maxl (map value_size (map s (vars_of_term t))));
       set (y:= maxl (map value_size (map s (flat_map vars_of_term lt))));
       set (z := suml (map term_size lt)).
@@ -690,7 +689,7 @@ intros s t; induction t as [ x | c lt IH | f lt IH ] using term_ind2.
   * apply plus_le_compat_l; apply IH.
 
   * { clear IH; unfold max_size_image_subst; simpl; do 2 rewrite map_app; rewrite maxl_app.
-    set (w := term_size t);
+    set (w := ╎t╎);
     set (x:= maxl (map value_size (map s (vars_of_term t))));
     set (y:= maxl (map value_size (map s (flat_map vars_of_term lt))));
     set (z := suml (map term_size lt)).
@@ -710,28 +709,14 @@ intros s t; induction t as [ x | c lt IH | f lt IH ] using term_ind2.
     - ring. }
 Qed.
 
-(* |r| ≤ |t|
-
-   t match le motif, donc pour toute variable v du motif, |v sigma| ≤ |t|
-   soit R la taille maximale d’une image de variable par la substitution
-   donc |v sigma| ≤ R ≤ |t|
-   
-   toute variable de r est une variable du motif donc de taille ≤ |t|
-   |rsig| ≤ |r|(R+1) d’après (1)
-   |r| ≤ max_rhs par définition
-   |rsig| ≤ max_rhs(R+1)
-   
-   |rsig| ≤ activ(|t|) pour activ = x → max_rhs(x+1)
-*)
-
-(* |xσ| ≤ |pσ| pour x ∈ p *)
+(** |xσ| ≤ |pσ| for all x ∈ p *)
 Lemma size_subst_var_le_size_value:
   forall p s (x:variable) v, v = psubst s p -> In x (vars_of_pattern p) -> value_size (s x) <= value_size v.
 Proof.
 intros p s x.
 induction p as [ x' | c lp IH ] using pattern_ind2 ; intros v H_match H_x_in_pattern.
 
-- (* Cas de base p = x *)
+- (* base case: p = x *)
   simpl in *.
   destruct H_x_in_pattern.
 
@@ -740,11 +725,11 @@ induction p as [ x' | c lp IH ] using pattern_ind2 ; intros v H_match H_x_in_pat
 
   + case H.
 
-- (* Cas récursif *)
+- (* Inductive case *)
   simpl in * |-.
   subst v.
   simpl.
-  (* On prouve d’abord que x dans le motif de départ implique qu’il est dans un des p de lp *)
+  (* x is in one of the sub-patterns *)
   rewrite in_flat_map in H_x_in_pattern.
   destruct H_x_in_pattern as [ p [ H_p_in_lp H_x_in_p ] ].
   etransitivity.
@@ -763,7 +748,7 @@ induction p as [ x' | c lp IH ] using pattern_ind2 ; intros v H_match H_x_in_pat
 Qed.
 
 Lemma max_size_image_subst_bounded :
-  forall t s, max_size_image_subst t s <= term_size (subst s t).
+  forall t s, max_size_image_subst t s <= ╎subst s t╎.
 Proof.
 intros t s; unfold max_size_image_subst; rewrite map_map;
 induction t as [ x | c lt IH | f lt IH ] using term_ind2; simpl;
@@ -773,14 +758,14 @@ rewrite map_map; apply maxl_le_suml_map; exact IH.
 Qed.
 
 (* This definition corresponds to the r in the proof of Proposition 4. *)
-Definition activation_bound (prog : list rule) : nat -> nat :=
+Definition 𝓡 (prog : list rule) : nat -> nat :=
   fun x => max_rhs prog * (1 + x).
 
-Lemma activation_bound_monotone (prog : list rule) :
-  forall x y, x <= y -> activation_bound prog x <= activation_bound prog y.
+Lemma 𝓡_monotone (prog : list rule) :
+  forall x y, x <= y -> 𝓡 prog x <= 𝓡 prog y.
 Proof.
 intros x y H_le.
-unfold activation_bound.
+unfold 𝓡.
 apply mult_le_compat_l.
 apply le_n_S.
 assumption.

@@ -1,3 +1,4 @@
+(** Call by value semantics with memoisation **)
 Require Import Omega Psatz.
 Require Import Bool Arith Compare_dec Max List Permutation.
 Import List.ListNotations.
@@ -5,8 +6,6 @@ Require Import Cecoa.Lib Cecoa.Syntax.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
-
-(* Call-by-value semantics with cache *)
 
 Section CBV.
 
@@ -23,7 +22,9 @@ Notation term := (Syntax.term variable function constructor).
 Notation pattern := (Syntax.pattern variable constructor).
 Notation rule := (Syntax.rule variable function constructor).
 Notation term_beq := (term_beq variable_eq_dec function_eq_dec constructor_eq_dec).
+Notation "'╎' t '╎'" := (@term_size variable function constructor t) (at level 10).
 
+(** Cache as association list **)
 Definition cache : Type := list (term * value).
 
 Notation assoc_cache := (assoc term_beq).
@@ -58,14 +59,14 @@ Proof.
 apply cache_beq_eq; trivial.
 Qed.
 
+(** * Derivation rules *)
 Inductive cbv : Type :=
 | cbv_constr : list cbv -> cache -> term -> cache -> value -> cbv
 | cbv_split : list cbv -> cbv -> cache -> term -> cache -> value -> cbv
 | cbv_update : nat -> (variable -> value) -> cbv -> cache -> term -> cache -> value -> cbv
 | cbv_read : cache -> term -> value -> cbv.
 
-(* Smarter induction principle than the one automatically generated *)
-
+(* begin hide *)
 Lemma cbv_ind2_gen :
   forall (P : cbv -> Prop)(Q : list cbv -> Prop),
   Q nil ->
@@ -90,6 +91,9 @@ pose (H1 P Q) as HH1.
 - auto.
 
 Qed.
+(* end hide *)
+
+(** Smarter induction principle than the one automatically generated *)
 
 Lemma cbv_ind2 :
   forall (P : cbv -> Prop),
@@ -104,11 +108,11 @@ apply cbv_ind2_gen with (Q := fun lp => forall p, In p lp -> P p); simpl; try ta
 intuition; subst; trivial.
 Qed.
 
-(* Being a subtree of *)
+(** Being a subtree of **)
 
-Fixpoint InCBV p proof_tree : Prop :=
-  p = proof_tree \/
-  match proof_tree with
+Fixpoint InCBV p π : Prop :=
+  p = π \/
+  match π with
       | cbv_constr lp _ _ _ _ => orl (map (InCBV p) lp)
       | cbv_split lp p' _ _ _ _ => InCBV p p' \/ orl (map (InCBV p) lp)
       | cbv_update _ _ p' _ _ _ _ => InCBV p p'
@@ -117,7 +121,7 @@ Fixpoint InCBV p proof_tree : Prop :=
 
 Lemma InCBV_refl p : InCBV p p.
 Proof.
-induction p using cbv_ind2; simpl; tauto. 
+induction p using cbv_ind2; simpl; tauto.
 Qed.
 
 Lemma InCBV_trans p p' p'': InCBV p p' -> InCBV p' p'' -> InCBV p p''.
@@ -150,21 +154,21 @@ intros p p' H1 [H2 | H2]; simpl; subst; trivial.
 - right.
   apply IH_p' with p'; trivial.
 
-- tauto. 
+- tauto.
 Qed.
 
-(* Reverse induction on proof trees *)
+(** Reverse induction on proof trees *)
 
 Lemma cbv_reverse_induction :
-  forall (P : cbv -> Prop) proof_tree,
-  P proof_tree ->
-  (forall lp c1 t c2 v, InCBV (cbv_constr lp c1 t c2 v) proof_tree -> P (cbv_constr lp c1 t c2 v) -> forall p, In p lp -> P p) ->
-  (forall lp p c1 t c2 v, InCBV (cbv_split lp p c1 t c2 v) proof_tree -> P (cbv_split lp p c1 t c2 v) -> forall p', (p' = p \/ In p' lp) -> P p') ->
-  (forall i s p c1 t c2 v, InCBV (cbv_update i s p c1 t c2 v) proof_tree -> P (cbv_update i s p c1 t c2 v) -> P p) ->
-  forall p, InCBV p proof_tree -> P p.
+  forall (P : cbv -> Prop) π,
+  P π ->
+  (forall lp c1 t c2 v, InCBV (cbv_constr lp c1 t c2 v) π -> P (cbv_constr lp c1 t c2 v) -> forall p, In p lp -> P p) ->
+  (forall lp p c1 t c2 v, InCBV (cbv_split lp p c1 t c2 v) π -> P (cbv_split lp p c1 t c2 v) -> forall p', (p' = p \/ In p' lp) -> P p') ->
+  (forall i s p c1 t c2 v, InCBV (cbv_update i s p c1 t c2 v) π -> P (cbv_update i s p c1 t c2 v) -> P p) ->
+  forall p, InCBV p π -> P p.
 Proof.
-intros P proof_tree H_proof_tree H_constr H_split H_function p H_p.
-induction proof_tree as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH_p' | c t v] using cbv_ind2;
+intros P π H_π H_constr H_split H_function p H_p.
+induction π as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH_p' | c t v] using cbv_ind2;
 simpl in H_p.
 
 - destruct H_p as [H_p | H_p].
@@ -177,9 +181,9 @@ simpl in H_p.
 
     * { eapply H_constr.
 
-      - apply InCBV_refl. 
+      - apply InCBV_refl.
 
-      - exact H_proof_tree.
+      - exact H_π.
 
       - exact H1. }
 
@@ -217,7 +221,7 @@ simpl in H_p.
 
       - apply InCBV_refl.
 
-      - exact H_proof_tree.
+      - exact H_π.
 
       - left; reflexivity. }
 
@@ -242,7 +246,7 @@ simpl in H_p.
 
     * apply InCBV_refl.
 
-    * exact H_proof_tree.
+    * exact H_π.
 
     *  right; exact H1.
 
@@ -280,7 +284,7 @@ simpl in H_p.
 
       - apply InCBV_refl.
 
-      - exact H_proof_tree. }
+      - exact H_π. }
 
     * intros lp' c1' t' c2' v' H3 H4 p'' H5.
       apply H_constr with lp' c1' t' c2' v'; trivial.
@@ -303,47 +307,54 @@ simpl in H_p.
   + tauto.
 Qed.
 
-Definition rule_subst_of_cbv_update ( subst_default : variable -> value) (proof_tree : cbv) : nat * (variable -> value) :=
-  match proof_tree with
+Definition rule_subst_of_cbv_update ( subst_default : variable -> value) (π : cbv) : nat * (variable -> value) :=
+  match π with
   | cbv_update i s _ _ _ _ _ => (i, s)
   | _ => (0, subst_default) (* impossible case *)
   end.
 
-Definition proj_left (proof_tree : cbv) : term :=
-  match proof_tree with
+(** Term of a tree *)
+Definition proj_left (π : cbv) : term :=
+  match π with
     | cbv_constr _ _ t _ _ => t
     | cbv_split _ _ _ t _ _ => t
     | cbv_update _ _ _ _ t _ _ => t
     | cbv_read _ t _ => t
   end.
 
-Definition proj_right (proof_tree : cbv) : value :=
-  match proof_tree with
+(** Value of a tree *)
+Definition proj_right (π : cbv) : value :=
+  match π with
     | cbv_constr _ _ _ _ v => v
     | cbv_split _ _ _ _ _ v => v
     | cbv_update _ _ _ _ _ _ v => v
     | cbv_read _ _ v => v
   end.
 
-Definition cache_left (proof_tree : cbv) : cache :=
-  match proof_tree with
+(** * Caches *)
+
+(** Initial cache of a tree*)
+Definition cache_left (π : cbv) : cache :=
+  match π with
     | cbv_constr _ c _ _ _ => c
     | cbv_split _ _ c _ _ _ => c
     | cbv_update _ _ _ c _ _ _ => c
     | cbv_read c _ _ => c
   end.
 
-Definition cache_right (proof_tree : cbv) : cache :=
-  match proof_tree with
+(** Final cache of a tree*)
+Definition cache_right (π : cbv) : cache :=
+  match π with
     | cbv_constr _ _ _ c _ => c
     | cbv_split _ _ _ _ c _ => c
     | cbv_update _ _ _ _ _ c _ => c
     | cbv_read c _ _ => c
   end.
 
+(** When a list of trees form a coherent succession of caches *)
 Fixpoint cache_path (C C' : cache)(l : list cbv) : bool :=
   match l with
-  | nil => cache_beq C C' 
+  | nil => cache_beq C C'
   | p :: l' => cache_beq C (cache_left p) && cache_path (cache_right p) C' l'
   end.
 
@@ -358,7 +369,7 @@ tauto.
 Qed.
 
 Lemma cache_path_app c1 c2 lp p lp' :
-  cache_path c1 c2 (lp ++ p :: lp') = true <-> 
+  cache_path c1 c2 (lp ++ p :: lp') = true <->
   cache_path c1 (cache_left p) lp = true /\ cache_path (cache_left p) c2 (p :: lp') = true.
 Proof.
 revert c1.
@@ -446,11 +457,11 @@ induction Clp as [ | Cp Clp' IH ]; intros c1 lp Hpath Hfor2.
     trivial.
 Qed.
 
-Lemma cache_path_transitivity_left c c' l: forall P:cache-> Prop, 
+Lemma cache_path_transitivity_left c c' l: forall P:cache-> Prop,
       cache_path c c' l = true ->
-      P c ->(forall p, In p l -> 
-      P (cache_left p) ->  
-      P (cache_right p)) -> 
+      P c ->(forall p, In p l ->
+      P (cache_left p) ->
+      P (cache_right p)) ->
      (forall p, In p l -> P (cache_left p)).
 Proof.
 revert l c.
@@ -477,14 +488,14 @@ apply andb_true_iff in H.
 elim H;clear H;auto.
 Qed.
 
-Lemma cache_path_transitivity c c' l: forall P:cache-> Prop, 
+Lemma cache_path_transitivity c c' l: forall P:cache-> Prop,
       cache_path c c' l = true ->
-      P c ->(forall p, In p l -> 
-      P (cache_left p) ->  
+      P c ->(forall p, In p l ->
+      P (cache_left p) ->
       P (cache_right p)) -> P c'.
 Proof.
 revert l c.
-induction l. 
+induction l.
 intros.
 apply cache_beq_eq in H.
 rewrite <- H;auto.
@@ -541,8 +552,10 @@ Variable prog : list rule.
 
 Variable max_arity : nat.
 
-Fixpoint wf (proof_tree : cbv) : Prop :=
-  match proof_tree with
+(** * Well-formed trees *)
+
+Fixpoint wf (π : cbv) : Prop :=
+  match π with
     | cbv_constr l C (capply c lt) C' (c_capply c' lv) =>
         cache_path C C' l = true /\
         c = c' /\
@@ -570,7 +583,7 @@ Fixpoint wf (proof_tree : cbv) : Prop :=
         lv = map (@term_from_value _ _ _) (map (psubst s) lp) /\
         proj_left p = subst s t /\ proj_right p = v /\
         cache_left p = C /\  True /\
-        C' = (t0, v) :: cache_right p /\ 
+        C' = (t0, v) :: cache_right p /\
         wf  p /\ length lv <= max_arity
     | cbv_read C (fapply _ lv as t) v =>
         assoc term_beq t C = Some v /\
@@ -584,12 +597,12 @@ destruct t; simpl; try tauto.
 intro H; decompose record H; auto.
 Qed.
 
-Lemma wf_InCBV_wf p proof_tree: wf proof_tree -> InCBV p proof_tree -> wf p.
+Lemma wf_InCBV_wf p π: wf π -> InCBV p π -> wf p.
 Proof.
-intro H_proof_tree_wf.
+intro H_π_wf.
 apply cbv_reverse_induction.
 
-- apply H_proof_tree_wf.
+- apply H_π_wf.
 
 - intros lp c1 t c2 v _.
   simpl.
@@ -597,7 +610,7 @@ apply cbv_reverse_induction.
   destruct v.
   intros [ _ [ _ [ _ H_map_wf ] ] ] p' H_in_p'_lp.
   apply andl_in with (map wf lp).
-  
+
   + apply H_map_wf.
 
   + apply in_map.
@@ -640,55 +653,57 @@ apply cbv_reverse_induction.
   decompose record H2; assumption.
 Qed.
 
-(* Sizes *)
-
+(** ** Sizes *)
 Definition cache_size (c : cache) : nat :=
-  suml (map (fun tv => term_size (fst tv) + value_size (snd tv)) c).
+  suml (map (fun tv => ╎ fst tv ╎ + value_size (snd tv)) c).
 
-Fixpoint size_rec (proof_tree : cbv) : nat :=
-  match proof_tree with
-  | cbv_constr l c1 t c2 v => term_size t + value_size v + suml (map size_rec l)
-  | cbv_split l p c1 t c2 v => term_size t + value_size v + size_rec p + suml (map size_rec l)
-  | cbv_update _ _ p c1 t c2 v => size_rec p + term_size t + value_size v
-  | cbv_read c t v => term_size t + value_size v
+Fixpoint size_rec (π : cbv) : nat :=
+  match π with
+  | cbv_constr l c1 t c2 v => ╎t╎ + value_size v + suml (map size_rec l)
+  | cbv_split l p c1 t c2 v => ╎t╎ + value_size v + size_rec p + suml (map size_rec l)
+  | cbv_update _ _ p c1 t c2 v => size_rec p + ╎t╎ + value_size v
+  | cbv_read c t v => ╎t╎ + value_size v
   end.
 
-Definition size (proof_tree : cbv) : nat :=
-  size_rec proof_tree + cache_size (cache_left proof_tree).
+(** Size of a proof *)
+Definition size (π : cbv) : nat :=
+  size_rec π + cache_size (cache_left π).
+Notation "'∣' p '∣'" := (size p) (at level 10).
 
-Fixpoint max_active_size (proof_tree : cbv) : nat :=
-  match proof_tree with
-  | cbv_constr lp _ _ _ _ => maxl (map max_active_size lp)
-  | cbv_split lp p _ _ _ _ => max (max_active_size p) (maxl (map max_active_size lp)) 
-  | cbv_update _ _ p _ t _ v => max (term_size t + value_size v) (max_active_size p)
+(** Maximum size of an active judgement (𝓢) *)
+Fixpoint 𝓢 (π : cbv) : nat :=
+  match π with
+  | cbv_constr lp _ _ _ _ => maxl (map 𝓢 lp)
+  | cbv_split lp p _ _ _ _ => max (𝓢 p) (maxl (map 𝓢 lp))
+  | cbv_update _ _ p _ t _ v => max (╎t╎ + value_size v) (𝓢 p)
   | cbv_read c t v => 0
   end.
 
-Fixpoint max_judgement_size (proof_tree : cbv) : nat :=
-  match proof_tree with
-  | cbv_constr lp c1 t c2 v => max (term_size t + value_size v) (maxl (map max_judgement_size lp))
-  | cbv_split lp p c1 t c2 v => max (term_size t + value_size v) (max (max_judgement_size p) (maxl (map max_judgement_size lp)))
-  | cbv_update _ _ p c1 t c2 v => max (term_size t + value_size v) (max_judgement_size p)
-  | cbv_read c t v => term_size t + value_size v
+Fixpoint max_judgement_size (π : cbv) : nat :=
+  match π with
+  | cbv_constr lp c1 t c2 v => max (╎t╎ + value_size v) (maxl (map max_judgement_size lp))
+  | cbv_split lp p c1 t c2 v => max (╎t╎ + value_size v) (max (max_judgement_size p) (maxl (map max_judgement_size lp)))
+  | cbv_update _ _ p c1 t c2 v => max (╎t╎ + value_size v) (max_judgement_size p)
+  | cbv_read c t v => ╎t╎ + value_size v
   end.
 
-(* Sub-trees *)
+(** Set of judgements (subtrees) *)
 
-Fixpoint sub_trees (proof_tree : cbv) : list cbv :=
-  proof_tree :: (
-    match proof_tree with
-    | cbv_constr lp _ _ _ _ => flat_map sub_trees lp
-    | cbv_split lp p _ _ _ _ => flat_map sub_trees (p :: lp)
-    | cbv_update _ _ p _ _ _ _ => sub_trees p
+Fixpoint ℐ (π : cbv) : list cbv :=
+  π :: (
+    match π with
+    | cbv_constr lp _ _ _ _ => flat_map ℐ lp
+    | cbv_split lp p _ _ _ _ => flat_map ℐ (p :: lp)
+    | cbv_update _ _ p _ _ _ _ => ℐ p
     | cbv_read _ _ _ => []
     end ).
 
-Lemma sub_trees_neq_nil : forall p, sub_trees p <> [].
+Lemma ℐ_neq_nil : forall p, ℐ p <> [].
 Proof.
 destruct p; simpl; congruence.
 Qed.
 
-Lemma InCBV_In_sub_trees p p' : InCBV p p' <-> In p (sub_trees p').
+Lemma InCBV_In_ℐ p p' : InCBV p p' <-> In p (ℐ p').
 Proof.
 split.
 
@@ -697,7 +712,7 @@ split.
   + intros [H1 | H1].
 
     * left.
-      congruence. 
+      congruence.
 
     * right.
       rewrite in_flat_map.
@@ -725,7 +740,7 @@ split.
   + intros [H1 | H1].
 
     * left.
-      congruence. 
+      congruence.
 
     * right.
       apply IH_p.
@@ -750,13 +765,13 @@ split.
 
   + tauto.
 
-  + trivial. 
+  + trivial.
 Qed.
 
-Lemma sub_trees_size_rec_le p proof_tree :
-  In p (sub_trees proof_tree) -> size_rec p <= size_rec proof_tree.
+Lemma ℐ_size_rec_le p π :
+  In p (ℐ π) -> size_rec p <= size_rec π.
 Proof.
-induction proof_tree as [ lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p | i s p' c1 t c2 v IH_p | c t v ] using cbv_ind2;
+induction π as [ lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p | i s p' c1 t c2 v IH_p | c t v ] using cbv_ind2;
  unfold size; simpl; intros [ H1 | H1 ]; subst; trivial; try tauto.
 
 - rewrite in_flat_map in H1.
@@ -806,7 +821,7 @@ Fixpoint proj_left_max_size_list (default : cbv) (proof_trees : list cbv) : cbv 
     | [p] => p
     | p :: ps =>
       let p' := proj_left_max_size_list default ps in
-      if leb (term_size (proj_left p)) (term_size (proj_left p')) then p' else p
+      if leb (╎proj_left p╎) (╎proj_left p'╎) then p' else p
   end.
 
 Lemma In_proj_left_max_size_list p lp : lp <> [] -> In (proj_left_max_size_list p lp) lp.
@@ -820,13 +835,13 @@ match goal with |- context [leb ?x ?y] => case_eq (leb x y); intro H_leb end.
 - tauto.
 Qed.
 
-Lemma proj_left_size_le_max_gen default proof_trees proof_tree:
-  In proof_tree proof_trees ->
-  term_size (proj_left proof_tree) <= term_size (proj_left (proj_left_max_size_list default proof_trees)).
+Lemma proj_left_size_le_max_gen default proof_trees π:
+  In π proof_trees ->
+  ╎proj_left π╎ <= ╎proj_left (proj_left_max_size_list default proof_trees)╎.
 Proof.
 induction proof_trees as [ | p1 [ | p2 proof_trees ] IH]; simpl.
 
-- tauto. 
+- tauto.
 
 - intros [H1 | H1].
 
@@ -843,7 +858,7 @@ induction proof_trees as [ | p1 [ | p2 proof_trees ] IH]; simpl.
     * rewrite leb_iff in H_leb.
       exact H_leb.
 
-    * trivial. 
+    * trivial.
 
   + subst.
     match goal with |- context [leb ?x ?y] => case_eq (leb x y); intro H_leb end.
@@ -877,29 +892,29 @@ induction proof_trees as [ | p1 [ | p2 proof_trees ] IH]; simpl.
       }
 Qed.
 
-Definition proj_left_max_size (proof_tree : cbv) : cbv :=
-  proj_left_max_size_list (proof_tree) (sub_trees proof_tree).
+Definition proj_left_max_size (π : cbv) : cbv :=
+  proj_left_max_size_list π (ℐ π).
 
-Lemma proj_left_size_le_max proof_tree:
-  forall p, InCBV p proof_tree ->
-  term_size (proj_left p) <= term_size (proj_left (proj_left_max_size proof_tree)).
+Lemma proj_left_size_le_max π:
+  forall p, InCBV p π ->
+  ╎proj_left p╎ <= ╎proj_left (proj_left_max_size π)╎.
 Proof.
 intros p H_InCBV.
 apply proj_left_size_le_max_gen.
-apply InCBV_In_sub_trees.
+apply InCBV_In_ℐ.
 trivial.
 Qed.
 
 Lemma InCBV_proj_left_max_size p : InCBV (proj_left_max_size p) p.
 Proof.
 unfold proj_left_max_size.
-apply InCBV_In_sub_trees.
+apply InCBV_In_ℐ.
 apply In_proj_left_max_size_list.
-apply sub_trees_neq_nil.
+apply ℐ_neq_nil.
 Qed.
 
-Fixpoint max_proj_right_size (proof_tree : cbv) : nat :=
-  match proof_tree with
+Fixpoint max_proj_right_size (π : cbv) : nat :=
+  match π with
   | cbv_constr lp _ t _ v => max (value_size v) (maxl (map max_proj_right_size lp))
   | cbv_split lp p _ t _ v => max (value_size v) (max (max_proj_right_size p) (maxl (map max_proj_right_size lp)))
   | cbv_update _ _ p _ t _ v => max (value_size v) (max_proj_right_size p)
@@ -907,17 +922,17 @@ Fixpoint max_proj_right_size (proof_tree : cbv) : nat :=
   end.
 
 Lemma judgement_size_le_projs_size p :
-  max_judgement_size p <= term_size (proj_left (proj_left_max_size p)) + max_proj_right_size p.
+  max_judgement_size p <= ╎proj_left (proj_left_max_size p)╎ + max_proj_right_size p.
 Proof.
 induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 v IH_p | c t v ] using cbv_ind2; simpl.
 
-- destruct (max_dec (term_size t + value_size v) (maxl (map max_judgement_size lp))) as [ H | H ];
+- destruct (max_dec (╎t╎ + value_size v) (maxl (map max_judgement_size lp))) as [ H | H ];
   rewrite H.
 
   + apply plus_le_compat.
 
     * change t with (proj_left (cbv_constr lp c1 t c2 v)) at 1.
-      apply proj_left_size_le_max. 
+      apply proj_left_size_le_max.
       apply InCBV_refl.
 
     * apply le_max_l.
@@ -941,20 +956,20 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
           apply proj_left_size_le_max.
           eapply InCBV_trans.
           apply InCBV_proj_left_max_size.
-          apply InCBV_In_sub_trees.
+          apply InCBV_In_ℐ.
           simpl.
           right.
           rewrite in_flat_map.
           exists p.
           split; trivial.
-          apply InCBV_In_sub_trees.
+          apply InCBV_In_ℐ.
           apply InCBV_refl.
 
         + apply le_max_r.
 
       }
 
-- destruct (max_dec (term_size t + value_size v) (max (max_judgement_size p) (maxl (map max_judgement_size lp)))) as [ H1 | H1 ];
+- destruct (max_dec (╎t╎ + value_size v) (max (max_judgement_size p) (maxl (map max_judgement_size lp)))) as [ H1 | H1 ];
   rewrite H1.
 
   + apply plus_le_compat.
@@ -971,7 +986,7 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
     * { etransitivity.
 
         - apply IH_p.
- 
+
         - apply plus_le_compat.
 
           + apply proj_left_size_le_max.
@@ -1003,7 +1018,7 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
               apply proj_left_size_le_max.
               eapply InCBV_trans.
               apply InCBV_proj_left_max_size.
-              apply InCBV_In_sub_trees.
+              apply InCBV_In_ℐ.
               simpl.
               right.
               rewrite in_app_iff.
@@ -1011,14 +1026,14 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
               rewrite in_flat_map.
               exists p'.
               split; trivial.
-              apply InCBV_In_sub_trees.
+              apply InCBV_In_ℐ.
               apply InCBV_refl.
 
             * etransitivity; [idtac | apply le_max_r]; apply le_max_r.
 
       }
 
-- destruct (max_dec (term_size t + value_size v) (max_judgement_size p)) as [ H | H ];
+- destruct (max_dec (╎t╎ + value_size v) (max_judgement_size p)) as [ H | H ];
   rewrite H.
 
   + apply plus_le_compat.
@@ -1046,24 +1061,28 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
 - trivial.
 Qed.
 
-Fixpoint activations (proof_tree : cbv) : list cbv :=
-  match proof_tree with
-  | cbv_constr lp _ _ _ _ => flat_map activations lp
-  | cbv_split lp p _ _ _ _ => activations p ++ flat_map activations lp
-  | cbv_update _ _ p _ _ _ _ as p' => p' :: activations p
+(** ** Activations (ℐᵃ) *)
+Fixpoint ℐᵃ (π : cbv) : list cbv :=
+  match π with
+  | cbv_constr lp _ _ _ _ => flat_map ℐᵃ lp
+  | cbv_split lp p _ _ _ _ => ℐᵃ p ++ flat_map ℐᵃ lp
+  | cbv_update _ _ p _ _ _ _ as p' => p' :: ℐᵃ p
   | cbv_read _ _ _ => []
   end.
 
-Fixpoint activations_cache_order (proof_tree : cbv) : list cbv :=
-  match proof_tree with
-  | cbv_constr lp _ _ _ _ => revflatten (map activations_cache_order lp)
-  | cbv_split lp p _ _ _ _ => activations_cache_order p ++ revflatten (map activations_cache_order lp)
-  | cbv_update _ _ p _ _ _ _ as p' => p' :: activations_cache_order p
+Definition 𝓐 (π : cbv) := length (ℐᵃ π).
+Arguments 𝓐 / π.
+
+Fixpoint ℐᵃ_cache_order (π : cbv) : list cbv :=
+  match π with
+  | cbv_constr lp _ _ _ _ => revflatten (map ℐᵃ_cache_order lp)
+  | cbv_split lp p _ _ _ _ => ℐᵃ_cache_order p ++ revflatten (map ℐᵃ_cache_order lp)
+  | cbv_update _ _ p _ _ _ _ as p' => p' :: ℐᵃ_cache_order p
   | cbv_read _ _ _ => []
   end.
 
-Lemma activations_cache_order_are_activations (p: cbv) :
-  Permutation (activations p) (activations_cache_order p).
+Lemma ℐᵃ_cache_order_are_ℐᵃ (p: cbv) :
+  Permutation (ℐᵃ p) (ℐᵃ_cache_order p).
 Proof.
   induction p using cbv_ind2.
   - simpl.
@@ -1090,37 +1109,34 @@ Proof.
   - apply Permutation_refl.
 Qed.
 
-Lemma activations_are_subtrees: forall p pi:cbv,
-   In p (activations pi) -> In p (sub_trees pi).
+Lemma ℐᵃ_are_subtrees: forall p pi:cbv,
+   In p (ℐᵃ pi) -> In p (ℐ pi).
 Proof.
 intros.
 induction pi using cbv_ind2;simpl;simpl in H.
-(* cbv_read : pas d'activations dedans *)
+(* cbv_read: no ℐᵃ *)
  4: exfalso;auto.
-(* cas cbv_update *)
+(* cbv_update *)
  3: elim H;intros.
  3: left;auto.
  3: right.
  3: apply IHpi;auto.
-(* fin du cbv_update *)
-(* cas cbv_constr *)
+(* cbv_constr *)
  right.
  induction lp;simpl;simpl in H;auto.
- (* cas cons *)
+ (*  cons *)
   apply in_or_app.
   apply in_app_or in H.
   elim H;intros.
-  (* tête *)
+  (* head *)
    left;apply H0;simpl;auto.
-  (* queue : induction *)
+  (* tail: induction *)
    right.
    apply IHlp;auto.
    intros.
    apply H0;auto.
    simpl;auto.
-  (* fin de l'induction *)
-(* fin du cbv_constr *)
-(* cas cbv_split *)
+(* cbv_split *)
  right.
  apply in_or_app.
  apply in_app_or in H.
@@ -1128,39 +1144,37 @@ induction pi using cbv_ind2;simpl;simpl in H.
  left;apply IHpi;auto.
  right.
  induction lp;simpl;simpl in H1;auto.
- (* cas cons *)
+ (* cons *)
   apply in_or_app.
   apply in_app_or in H1.
   elim H1;intros.
-  (* tête *)
+  (* head *)
    left;apply H0;simpl;auto.
-  (* queue : induction *)
+  (* tail: induction *)
    right.
    apply IHlp;auto.
    intros.
    apply H0;auto.
    simpl;auto.
-  (* fin de l'induction *)
-(* fin du cas cbv_split *)
 Qed.
 
-Corollary activations_inCBV: forall p pi:cbv,
-   In p (activations pi) -> InCBV p pi.
+Corollary ℐᵃ_inCBV: forall p pi:cbv,
+   In p (ℐᵃ pi) -> InCBV p pi.
 Proof.
 intros.
-apply InCBV_In_sub_trees.
-apply activations_are_subtrees;auto.
+apply InCBV_In_ℐ.
+apply ℐᵃ_are_subtrees;auto.
 Qed.
 
 Definition functions_of_prog : list function :=
   map (fun x => match x with | rule_intro f _ _ => f end) prog.
 
 Lemma activation_is_function :
-  forall proof_tree p,
-  In p (activations proof_tree) -> exists i s p' c1 t c2 v, p = cbv_update i s p' c1 t c2 v.
+  forall π p,
+  In p (ℐᵃ π) -> exists i s p' c1 t c2 v, p = cbv_update i s p' c1 t c2 v.
 Proof.
-intros proof_tree p H.
-induction proof_tree as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH | c t v ] using cbv_ind2.
+intros π p H.
+induction π as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH | c t v ] using cbv_ind2.
 
 - (* cbv_constr *)
   simpl in H.
@@ -1194,18 +1208,18 @@ induction proof_tree as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p'
   + generalize (IH H_ind).
     trivial.
 
-- simpl in H; tauto. 
+- simpl in H; tauto.
 Qed.
 
 
-Lemma cbv_update_in_activations_InCBV proof_tree sub_proof_tree i s p c1 t c2 v:
+Lemma cbv_update_in_ℐᵃ_InCBV π sub_proof_tree i s p c1 t c2 v:
   sub_proof_tree = cbv_update i s p c1 t c2 v ->
-  InCBV sub_proof_tree proof_tree ->
-  In sub_proof_tree (activations proof_tree).
+  InCBV sub_proof_tree π ->
+  In sub_proof_tree (ℐᵃ π).
 Proof.
 intros H0 H1.
 subst.
-induction proof_tree as [ lp c1' t' c2' v' IH | lp p' c1' t' c2' v' IH1 IH2 | i' s' p' c1' t' c2' v' IH | c t' v' ] using cbv_ind2; simpl in *.
+induction π as [ lp c1' t' c2' v' IH | lp p' c1' t' c2' v' IH1 IH2 | i' s' p' c1' t' c2' v' IH | c t' v' ] using cbv_ind2; simpl in *.
 
 - destruct H1 as [H1 | H1]; try discriminate H1.
   rewrite in_flat_map.
@@ -1232,12 +1246,12 @@ induction proof_tree as [ lp c1' t' c2' v' IH | lp p' c1' t' c2' v' IH1 IH2 | i'
 
   + congruence.
 
-  + trivial. 
+  + trivial.
 Qed.
 
-Lemma activations_wf : forall proof_tree p, wf proof_tree -> In p (activations proof_tree) -> wf p.
+Lemma ℐᵃ_wf : forall π p, wf π -> In p (ℐᵃ π) -> wf p.
 Proof.
-intros proof_tree p H1; revert p; induction proof_tree as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH1 IH2 | i s p' c1 t c2 v IH | c t v ] using cbv_ind2;
+intros π p H1; revert p; induction π as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH1 IH2 | i s p' c1 t c2 v IH | c t v ] using cbv_ind2;
 intros p H2; simpl in * |-.
 
 - destruct t as [ x | c lt | f lt ]; try tauto.
@@ -1287,18 +1301,18 @@ intros p H2; simpl in * |-.
   subst lv v c1 c2 p.
   split.
   + auto.
-  
+
   + exists lp; exists t; repeat split; auto.
 
-- tauto. 
+- tauto.
 Qed.
 
-Lemma le_max_active_size proof_tree p :
-  In p (activations proof_tree) ->
-  term_size (proj_left p) + value_size (proj_right p) <= max_active_size proof_tree.
+Lemma le_𝓢 π p :
+  In p (ℐᵃ π) ->
+  ╎proj_left p╎ + value_size (proj_right p) <= 𝓢 π.
 Proof.
 intro H.
-induction proof_tree as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH | c t v ] using cbv_ind2; simpl in *.
+induction π as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH | c t v ] using cbv_ind2; simpl in *.
 
 - rewrite in_flat_map in H.
   destruct H as (p' & H1 & H2).
@@ -1326,7 +1340,7 @@ induction proof_tree as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p'
   + rewrite in_flat_map in H.
     destruct H as (p'' & H1 & H2).
     etransitivity.
- 
+
     * apply IH_lp.
       eexact H1.
       tauto.
@@ -1353,15 +1367,15 @@ Qed.
 
 Hypothesis prog_is_wf : wf_prog max_arity prog.
 
-Lemma activation_bound_spec ( subst_default : variable -> value) :
-  forall proof_tree, wf proof_tree -> forall p, In p (activations proof_tree) ->
+Lemma 𝓡_spec ( subst_default : variable -> value) :
+  forall π, wf π -> forall p, In p (ℐᵃ π) ->
   let (i, s) := rule_subst_of_cbv_update subst_default p in
-  term_size (subst s (rhs_of_rule (nth i prog rule_default))) <= activation_bound prog (term_size (proj_left p)).
+  ╎subst s (rhs_of_rule (nth i prog rule_default))╎ <= 𝓡 prog (╎proj_left p╎).
 Proof.
-intros proof_tree H_wf_proof_tree p H_p_activation.
+intros π H_wf_π p H_p_activation.
 case_eq (rule_subst_of_cbv_update subst_default p).
 intros i s H_p_fun.
-unfold activation_bound.
+unfold 𝓡.
 set (rule_i := nth i prog rule_default);
 set (l := lhs_of_rule rule_i);
 set (r := rhs_of_rule rule_i);
@@ -1374,7 +1388,7 @@ apply mult_le_compat.
   + reflexivity.
 
   + apply nth_In.
-    generalize (activations_wf H_wf_proof_tree H_p_activation); intro H_wf_p.
+    generalize (ℐᵃ_wf H_wf_π H_p_activation); intro H_wf_p.
     generalize (activation_is_function H_p_activation); intros (i' & s' & p' & c1 & t' & c2 & v & H_p_is_function).
     subst p.
     simpl in H_p_fun.
@@ -1386,7 +1400,7 @@ apply mult_le_compat.
 - apply plus_le_compat_l.
   transitivity (max_size_image_subst l s).
 
-  + (* parce que les variables de r apparaissent dans le membre gauche *)
+  + (* variables in r must appear on the left-hand-side *)
     apply incl_le_max_size_image_subst.
     assert (rule_vars_defined rule_i) as H_wf_rule_i.
     * { eapply andl_in.
@@ -1398,7 +1412,7 @@ apply mult_le_compat.
         exists rule_i.
         split; trivial.
         apply nth_In.
-        generalize (activations_wf H_wf_proof_tree H_p_activation); intro H_wf_p.
+        generalize (ℐᵃ_wf H_wf_π H_p_activation); intro H_wf_p.
         generalize (activation_is_function H_p_activation); intros (i' & s' & p' & c1 & t' & c2 & v & H_p_is_function).
         subst p.
         simpl in H_p_fun.
@@ -1419,8 +1433,7 @@ apply mult_le_compat.
 
   + assert (subst s l = t) as H_t_matches_lhs.
 
-    * (* parce que la preuve est bien formée *)
-      generalize (activations_wf H_wf_proof_tree H_p_activation); intro H_wf_p.
+    * generalize (ℐᵃ_wf H_wf_π H_p_activation); intro H_wf_p.
       generalize (activation_is_function H_p_activation); intros (i' & s' & p' & c1 & t' & c2 & v & H_p_is_function).
       unfold t; clear t.
       subst p.
@@ -1446,49 +1459,61 @@ apply mult_le_compat.
       apply max_size_image_subst_bounded.
 Qed.
 
-Fixpoint nb_judgements (proof_tree : cbv) : nat :=
-  match proof_tree with
+(** Number of judgments *)
+Fixpoint nb_judgements (π : cbv) : nat :=
+  match π with
   | cbv_constr lp _ _ _ _ => 1 + suml (map nb_judgements lp)
   | cbv_split lp p _ _ _ _ => 1 + nb_judgements p + suml (map nb_judgements lp)
   | cbv_update _ _ p _ _ _ _ => 1 + nb_judgements p
   | cbv_read _ _ _=> 1
   end.
+Notation "#ℐ" := nb_judgements.
 
-Fixpoint nb_judgements_sub_rec (proof_tree : cbv) : nat :=
-  match proof_tree with
+(** Number of pseudo-dependencies *)
+Fixpoint nb_judgements_sub_rec (π : cbv) : nat :=
+  match π with
   | cbv_constr lp _ _ _ _ => 1 + suml (map nb_judgements_sub_rec lp)
   | cbv_split lp p _ _ _ _ => 1 + nb_judgements_sub_rec p + suml (map nb_judgements_sub_rec lp)
   | cbv_update _ _ _ _ _ _ _ => 0
   | cbv_read _ _ _ => 0
   end.
+Notation "#𝓓'" := nb_judgements_sub_rec.
 
-Definition nb_judgements_sub (proof_tree : cbv) : nat :=
-  match proof_tree with
+(** Number of dependencies *)
+
+Definition nb_judgements_sub (π : cbv) : nat :=
+  match π with
   | cbv_constr _ _ _ _ _ => 0
   | cbv_split _ _ _ _ _ _ => 0
-  | cbv_update _ _ p _ _ _ _ => nb_judgements_sub_rec p
+  | cbv_update _ _ p _ _ _ _ => #𝓓' p
  | cbv_read _ _ _ => 0
   end.
+Notation "#𝓓" := nb_judgements_sub.
 
-Fixpoint nb_nodes (proof_tree : cbv) : nat :=
-  match proof_tree with
+(** Number of active and passive nodes *)
+Fixpoint nb_nodes (π : cbv) : nat :=
+  match π with
   | cbv_constr [] _ _ _ _ => 0
   | cbv_constr lp _ _ _ _ => 1 + suml (map nb_nodes lp)
   | cbv_split lp p _ _ _ _ => 1 + nb_nodes p + suml (map nb_nodes lp)
   | cbv_update _ _ p _ _ _ _ => 1 + nb_nodes p
   | cbv_read _ _ _ => 0
   end.
+Notation "#ℐᵃ⁺ᵖ" := nb_nodes.
 
-Fixpoint nb_read (proof_tree : cbv) : nat :=
-  match proof_tree with
+
+(** number of semi-active judgements *)
+Fixpoint nb_read (π : cbv) : nat :=
+  match π with
   | cbv_constr lp _ _ _ _ => suml (map nb_read lp)
   | cbv_split lp p _ _ _ _ => nb_read p + suml (map nb_read lp)
   | cbv_update _ _ p _ _ _ _ => nb_read p
   | cbv_read _ _ _ => 1
   end.
+Notation "#ℐˢ" := nb_read.
 
-Definition arity_cbv (proof_tree : cbv) : nat :=
-  match proof_tree with
+Definition arity_cbv (π : cbv) : nat :=
+  match π with
   | cbv_constr lp _ _ _ _  => length lp
   | cbv_split lp p _ _ _ _ => 1 + length lp
   | cbv_update _ _ p _ _ _ _ => 1
@@ -1516,9 +1541,12 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
     omega.
 Qed.
 
+(** ** Bounding semi-active judgements *)
+
+(** Proposition 24 *)
 Lemma nb_read_bound : forall p,
    wf p ->
-  nb_read p <= S (max_arity * nb_nodes p).
+  #ℐˢ p <= S (max_arity * #ℐᵃ⁺ᵖ p).
 Proof.
 intros p H_wf_p.
 induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 v IH_p | c t v ] using cbv_ind2.
@@ -1546,7 +1574,7 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
     * simpl; omega.
 
     * rewrite map_cons, suml_cons.
-      rewrite mult_succ_r, mult_plus_distr_l, <- plus_assoc, <- plus_Sn_m. 
+      rewrite mult_succ_r, mult_plus_distr_l, <- plus_assoc, <- plus_Sn_m.
       apply plus_le_compat_l.
       rewrite mult_suml_r.
       rewrite map_map.
@@ -1597,9 +1625,9 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
     * simpl. ring_simplify; omega.
 
     * rewrite map_cons, suml_cons.
-      rewrite mult_succ_r, mult_plus_distr_l, <- plus_assoc, <- plus_Sn_m. 
+      rewrite mult_succ_r, mult_plus_distr_l, <- plus_assoc, <- plus_Sn_m.
       apply plus_le_compat_l.
-      rewrite mult_plus_distr_l, plus_Snm_nSm, <- plus_assoc. 
+      rewrite mult_plus_distr_l, plus_Snm_nSm, <- plus_assoc.
       apply plus_le_compat_l.
       rewrite mult_suml_r.
       rewrite map_map.
@@ -1627,30 +1655,31 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
 - simpl; omega.
 Qed.
 
-Fixpoint first_activations_rec (proof_tree : cbv) : list cbv :=
-  match proof_tree with
+(** ** First activations *)
+Fixpoint first_activations_rec (π : cbv) : list cbv :=
+  match π with
   | cbv_constr lp _ _ _ _ => flat_map first_activations_rec lp
   | cbv_split lp p _ _ _ _ => first_activations_rec p ++ flat_map first_activations_rec lp
   | cbv_update _ _ _ _ _ _ _ as p' => [p']
   | cbv_read _ _ _ => []
   end.
 
-Definition first_activations (proof_tree : cbv) : list cbv :=
-  match proof_tree with
+Definition first_activations (π : cbv) : list cbv :=
+  match π with
   | cbv_constr lp _ _ _ _ => []
   | cbv_split lp p _ _ _ _ => []
   | cbv_update _ _ p _ _ _ _ => first_activations_rec p
   | cbv_read _ _ _ => []
   end.
 
-Definition strict_activations (proof_tree: cbv) :=
-  flat_map activations (first_activations proof_tree).
+Definition strict_activations (π: cbv) :=
+  flat_map ℐᵃ (first_activations π).
 
-Lemma first_activation_rec_is_update proof_tree p :
-  In p (first_activations_rec proof_tree) -> exists i s p' c1 t c2 v, p = cbv_update i s p' c1 t c2 v.
+Lemma first_activation_rec_is_update π p :
+  In p (first_activations_rec π) -> exists i s p' c1 t c2 v, p = cbv_update i s p' c1 t c2 v.
 Proof.
 intros H.
-induction proof_tree as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH | c t v ] using cbv_ind2;
+induction π as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH | c t v ] using cbv_ind2;
  simpl in H.
 
 - rewrite in_flat_map in H.
@@ -1666,19 +1695,19 @@ induction proof_tree as [ lp c1 t c2 v IH | lp p' c1 t c2 v IH_lp IH_p' | i s p'
 - tauto.
 Qed.
 
-Lemma first_activation_is_update proof_tree p :
-  In p (first_activations proof_tree) -> exists i s p' c1 t c2 v, p = cbv_update i s p' c1 t c2 v.
+Lemma first_activation_is_update π p :
+  In p (first_activations π) -> exists i s p' c1 t c2 v, p = cbv_update i s p' c1 t c2 v.
 Proof.
 intros H.
-destruct proof_tree as [ lp c1 t c2 v | lp p' c1 t c2 v | i s p' c1 t c2 v | c t v ]; simpl in H; try tauto.
+destruct π as [ lp c1 t c2 v | lp p' c1 t c2 v | i s p' c1 t c2 v | c t v ]; simpl in H; try tauto.
 apply first_activation_rec_is_update with p'.
 exact H.
 Qed.
 
-Lemma in_first_activations_rec_nb_judgements_le p proof_tree :
-  In p (first_activations_rec proof_tree) -> nb_judgements p <= nb_judgements proof_tree.
+Lemma in_first_activations_rec_nb_judgements_le p π :
+  In p (first_activations_rec π) -> #ℐ p <= #ℐ π.
 Proof.
-induction proof_tree as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH_p' | c t v] using cbv_ind2; simpl; intros H1.
+induction π as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH_p' | c t v] using cbv_ind2; simpl; intros H1.
 
 - rewrite in_flat_map in H1.
   destruct H1 as (p' & H1 & H2).
@@ -1700,7 +1729,7 @@ induction proof_tree as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s 
     apply IH_p'; trivial.
 
   + clear IH_p'.
-    transitivity (nb_judgements p'').
+    transitivity (#ℐ p'').
     apply IH_lp; trivial.
     apply le_S.
     rewrite plus_comm.
@@ -1716,12 +1745,12 @@ induction proof_tree as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s 
 - tauto.
 Qed.
 
-Lemma in_first_activations_nb_judgements_lt p proof_tree :
-  In p (first_activations proof_tree) -> nb_judgements p < nb_judgements proof_tree.
+Lemma in_first_activations_nb_judgements_lt p π :
+  In p (first_activations π) -> #ℐ p < #ℐ π.
 Proof.
 intros H1.
-destruct proof_tree as [ lp c1 t c2 v | lp p' c1 t c2 v | i s p' c1 t c2 v | c t v ]; simpl in H1; try tauto.
-apply le_lt_trans with (nb_judgements p').
+destruct π as [ lp c1 t c2 v | lp p' c1 t c2 v | i s p' c1 t c2 v | c t v ]; simpl in H1; try tauto.
+apply le_lt_trans with (#ℐ p').
 
 - apply in_first_activations_rec_nb_judgements_le; trivial.
 
@@ -1729,8 +1758,8 @@ apply le_lt_trans with (nb_judgements p').
 simpl; omega.
 Qed.
 
-Lemma first_activations_rec_incl_activations (p: cbv) :
-  incl (first_activations_rec p) (activations p).
+Lemma first_activations_rec_incl_ℐᵃ (p: cbv) :
+  incl (first_activations_rec p) (ℐᵃ p).
 Proof.
 unfold incl.
 induction p as [lp c1 t c2 v IHlp | lp p' c1 t c2 v IHlp IHp' | i s p' c1 t c2 v IHp' | c t v] using cbv_ind2;
@@ -1751,24 +1780,24 @@ induction p as [lp c1 t c2 v IHlp | lp p' c1 t c2 v IHlp IHp' | i s p' c1 t c2 v
   auto.
 Qed.
 
-Lemma first_activations_incl_activations (p: cbv) :
-  incl (first_activations p) (activations p).
+Lemma first_activations_incl_ℐᵃ (p: cbv) :
+  incl (first_activations p) (ℐᵃ p).
 Proof.
 destruct p; try (unfold incl; simpl; tauto).
 simpl.
-apply incl_tl, first_activations_rec_incl_activations.
+apply incl_tl, first_activations_rec_incl_ℐᵃ.
 Qed.
 
-Fixpoint first_activations_and_semi_rec (proof_tree : cbv) : list cbv :=
-  match proof_tree with
+Fixpoint first_activations_and_semi_rec (π : cbv) : list cbv :=
+  match π with
   | cbv_constr lp _ _ _ _          => flat_map first_activations_and_semi_rec lp
   | cbv_split lp p _ _ _ _         => first_activations_and_semi_rec p ++ flat_map first_activations_and_semi_rec lp
   | cbv_update _ _ _ _ _ _ _ as p' => [p']
   | cbv_read _ _ _ as p'           => [p']
   end.
 
-Definition first_activations_and_semi (proof_tree : cbv) : list cbv :=
-  match proof_tree with
+Definition first_activations_and_semi (π : cbv) : list cbv :=
+  match π with
   | cbv_constr lp _ _ _ _    => []
   | cbv_split lp p _ _ _ _   => []
   | cbv_update _ _ p _ _ _ _ => first_activations_and_semi_rec p
@@ -1788,8 +1817,8 @@ induction p as [ | | | ] using cbv_ind2; simpl; try congruence; auto with *.
   apply incl_appr, incl_flat_map; trivial.
 Qed.
 
-Lemma first_activations_and_semi_rec_incl_sub_trees p :
-  incl (first_activations_and_semi_rec p) (sub_trees p).
+Lemma first_activations_and_semi_rec_incl_ℐ p :
+  incl (first_activations_and_semi_rec p) (ℐ p).
 Proof.
   induction p as [ lp c1 t c2 v IHlp | lp p' c1 t c2 v IHlp IHp' | i s p' c1 t c2 v IHp' | c t v ]
               using cbv_ind2;
@@ -1800,10 +1829,10 @@ Proof.
     revert IHlp; clear.
     induction lp as [ | p lp IH ]; intros IHlp; simpl; [ intros p Hin; assumption | idtac ].
     apply incl_app.
-    + apply incl_tran with (m := sub_trees p).
+    + apply incl_tran with (m := ℐ p).
       * apply IHlp; simpl; tauto.
       * apply incl_appl; apply incl_refl.
-    + apply incl_tran with (m := flat_map sub_trees lp).
+    + apply incl_tran with (m := flat_map ℐ lp).
       * apply IH.
         intros; apply IHlp; simpl; tauto.
       * apply incl_appr; apply incl_refl.
@@ -1816,11 +1845,11 @@ Proof.
       revert IHlp; clear.
       induction lp as [ | p lp IH ]; intros IHlp; simpl; [ intros p Hin; assumption | idtac ].
       apply incl_app.
-      * { apply incl_tran with (m := sub_trees p).
+      * { apply incl_tran with (m := ℐ p).
           - apply IHlp; simpl; tauto.
           - apply incl_appl; apply incl_refl.
         }
-      * { apply incl_tran with (m := flat_map sub_trees lp).
+      * { apply incl_tran with (m := flat_map ℐ lp).
           - apply IH.
             intros; apply IHlp; simpl; tauto.
           - apply incl_appr; apply incl_refl.
@@ -1834,21 +1863,22 @@ Proof.
     apply incl_refl.
 Qed.
 
-Lemma first_activations_and_semi_incl_sub_trees p :
-  incl (first_activations_and_semi p) (sub_trees p).
+Lemma first_activations_and_semi_incl_ℐ p :
+  incl (first_activations_and_semi p) (ℐ p).
 Proof.
   destruct p; try (unfold incl; simpl; intros; tauto).
   simpl.
-  apply incl_tl; apply first_activations_and_semi_rec_incl_sub_trees.
+  apply incl_tl; apply first_activations_and_semi_rec_incl_ℐ.
 Qed.
 
+(** Induction principle on proof trees based on first-ℐᵃ *)
 Lemma cbv_big_induction :
   forall (P : cbv -> Prop),
   (forall i s p c1 t c2 v, (forall p', In p' (first_activations (cbv_update i s p c1 t c2 v)) -> P p') -> P (cbv_update i s p c1 t c2 v)) ->
   forall i s p c1 t c2 v, P (cbv_update i s p c1 t c2 v).
 Proof.
 intros P H1 i s p c1 t c2 v.
-remember (nb_judgements (cbv_update i s p c1 t c2 v)) as nbj eqn:Hsize.
+remember (#ℐ (cbv_update i s p c1 t c2 v)) as nbj eqn:Hsize.
 revert i s p c1 t c2 v Hsize.
 induction nbj as [ nbj' IH ] using lt_wf_ind.
 intros i s p c1 t c2 v Hsize.
@@ -1858,16 +1888,16 @@ intros p'' H1.
 generalize H1; intro H2.
 apply first_activation_is_update in H2.
 destruct H2 as (i' & s' & p' & c1' & t' & c2' & v' & H2).
-subst p''. 
-apply IH with (m := nb_judgements (cbv_update i' s' p' c1' t' c2' v')); trivial; clear IH.
+subst p''.
+apply IH with (m := #ℐ (cbv_update i' s' p' c1' t' c2' v')); trivial; clear IH.
 subst nbj'.
 apply in_first_activations_nb_judgements_lt.
 exact H1.
 Qed.
 
-Lemma activations_first_activations i s p' c1 t c2 v :
+Lemma ℐᵃ_first_activations i s p' c1 t c2 v :
   let p := cbv_update i s p' c1 t c2 v in
-  activations p = p :: flat_map activations (first_activations p).
+  ℐᵃ p = p :: flat_map ℐᵃ (first_activations p).
 Proof.
 unfold first_activations.
 simpl.
@@ -1883,6 +1913,9 @@ induction p' as [lp c1' t' c2' v' IH_lp | lp p c1' t' c2' v' IH_lp IH_p | i' s' 
   congruence.
 Qed.
 
+(** ** Properties on caches *)
+
+(** The initial cache of a well-formed term is a coherent prefix of the final cache *)
 Lemma cache_consistent p :
   wf p ->
   exists C,
@@ -1963,7 +1996,6 @@ intros Hwf.
             c2 = cache_right p' /\
             cache_path c1 (cache_left p') lp = true)
       as (Hwfp' & Hwflp & Heqc2 & Heqpath). {
-      (* Dans les deux cas, découle de la bonne formation. *)
       simpl in Hwf.
       destruct p'; try tauto; try (destruct t0; [ | destruct t | destruct t]; tauto).
       }
@@ -2169,7 +2201,7 @@ induction lp2 as [ | p' lp2 IH ] using rev_ind; simpl; intros c2 H_cache.
       destruct H5 as [ H5 | H5 ]; auto.
       apply H2 in H5.
       apply assoc_app_eq_None in H5.
-      tauto. 
+      tauto.
 
   + rewrite cache_path_app in H_cache; trivial.
     tauto.
@@ -2223,15 +2255,18 @@ rewrite assoc_app_eq_None in H3.
 tauto.
 Qed.
 
-Definition cbv_cache_entry (proof_tree : cbv) := (proj_left proof_tree, proj_right proof_tree).
+Definition cbv_cache_entry (π : cbv) := (proj_left π, proj_right π).
 
-Lemma cache_content (proof_tree : cbv) :
-  wf proof_tree ->
-  cache_right proof_tree =
-  map cbv_cache_entry (activations_cache_order proof_tree) ++
-      cache_left proof_tree.
+(** ** Bounding caches *)
+
+(** Lemma 21 *)
+Lemma cache_content (π : cbv) :
+  wf π ->
+  cache_right π =
+  map cbv_cache_entry (ℐᵃ_cache_order π) ++
+      cache_left π.
 Proof.
-induction proof_tree as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH_p' | c t v] using cbv_ind2; simpl; intros Hwf.
+induction π as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s p' c1 t c2 v IH_p' | c t v] using cbv_ind2; simpl; intros Hwf.
 - destruct t as [ | c lt | ]; try tauto;
   destruct v as [ c' lv ].
   destruct Hwf as (Hcachepath & _ & _ & _ & Hwflp & _).
@@ -2246,7 +2281,7 @@ induction proof_tree as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s 
     rewrite map_app; rewrite <- app_assoc.
     apply IH; try tauto.
     * intros; apply IH_lp; tauto.
-    * replace (map cbv_cache_entry (activations_cache_order p) ++ c1) with (cache_right p); try tauto.
+    * replace (map cbv_cache_entry (ℐᵃ_cache_order p) ++ c1) with (cache_right p); try tauto.
       subst c1.
       apply IH_lp; tauto.
 - rewrite map_app; rewrite <- app_assoc.
@@ -2260,7 +2295,7 @@ induction proof_tree as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s 
       decompose record Hwf; auto.
   }
 
-  assert (Heqcachep'_l : cache_left p' = map cbv_cache_entry (revflatten (map activations_cache_order lp)) ++ c1).
+  assert (Heqcachep'_l : cache_left p' = map cbv_cache_entry (revflatten (map ℐᵃ_cache_order lp)) ++ c1).
   {
     clear c2 t v Hwf IH_p' Hwfp' Heqcachep'_r.
     revert c1 Hpathlp Hwflp IH_lp.
@@ -2272,7 +2307,7 @@ induction proof_tree as [lp c1 t c2 v IH_lp | lp p' c1 t c2 v IH_lp IH_p' | i s 
       destruct Hwflp as [ Hwfp Hwflp ].
       rewrite map_app; rewrite <- app_assoc.
       apply IH; try tauto.
-      + replace (map cbv_cache_entry (activations_cache_order p) ++ c1) with (cache_right p); try tauto.
+      + replace (map cbv_cache_entry (ℐᵃ_cache_order p) ++ c1) with (cache_right p); try tauto.
         subst c1.
         apply IH_lp; tauto.
       + intros; apply IH_lp; tauto.
@@ -2290,7 +2325,7 @@ Qed.
 Lemma cache_content_on_path c1 c2 lp:
   andl (map wf lp) ->
   cache_path c1 c2 lp = true ->
-  c2 = map cbv_cache_entry (revflatten (map activations_cache_order lp)) ++ c1.
+  c2 = map cbv_cache_entry (revflatten (map ℐᵃ_cache_order lp)) ++ c1.
 Proof.
   revert c1 c2; induction lp as [ | p lp IH ]; intros c1 c2 Hwf Hcachepath.
 
@@ -2315,8 +2350,8 @@ Qed.
 Lemma cache_path_proj_left_in_tail_not_in_head t p lp c1 c2 :
   cache_path c1 c2 (p :: lp) = true ->
   andl (map wf (p :: lp)) ->
-  In t (map proj_left (revflatten (map activations_cache_order lp))) ->
-  ~ In t (map proj_left (activations_cache_order p)).
+  In t (map proj_left (revflatten (map ℐᵃ_cache_order lp))) ->
+  ~ In t (map proj_left (ℐᵃ_cache_order p)).
 Proof.
   intros Hcachepath Hwf Hin.
   assert (Hleft_fst: forall t: cbv, proj_left t = fst (cbv_cache_entry t)).
@@ -2398,7 +2433,7 @@ Qed.
 Lemma cache_path_proj_left_not_in_init t lp c1 c2 :
   cache_path c1 c2 lp = true ->
   andl (map wf lp) ->
-  In t (map proj_left (revflatten (map activations_cache_order lp))) ->
+  In t (map proj_left (revflatten (map ℐᵃ_cache_order lp))) ->
   ~ In t (map fst c1).
 Proof.
   intros Hcachepath Hwf Hin.
@@ -2445,7 +2480,7 @@ Proof.
     induction lp as [ | p lp IHlp' ]; trivial; intros c1 Hpath Hcache.
     simpl.
     f_equal.
-   
+
     + clear IHlp'.
       assert (Hin : In p (p::lp)); [simpl; left; trivial | idtac ].
       destruct (cache_path_consistent Hwflp Hpath Hin)
@@ -2527,7 +2562,7 @@ Proof.
       assert (Heqv : assoc_cache (fapply f lv') (ext ++ c2) = Some v).
       { simpl in Hext.
         case_eq (assoc_cache (fapply f lv') ext).
-        - (* cas où f(lv') est dans ext : absurde *)
+        - (* absurd case: f(lv') in ext *)
           intros v' HextSome.
           generalize (Hext (fapply f lv')); intros Hextf.
           rewrite HextSome in Hextf.
@@ -2538,8 +2573,7 @@ Proof.
             rewrite assoc_cache_hd in Hneq.
             discriminate.
 
-        - (* cas où f(lv') n’est pas dans ext *)
-          intros.
+        - intros.
           apply assoc_app_eq_Some; right; split; [ assumption | idtac ].
           subst c2.
           rewrite assoc_cache_hd.
@@ -2586,7 +2620,7 @@ Proof.
       rewrite Hlookuplt.
       assert (Heqv : assoc_cache (fapply f lv') (ext ++ c2) = Some v).
       { case_eq (assoc_cache (fapply f lv') ext).
-        - (* cas où f(lv') est dans ext : absurde *)
+        - (* absurd case: f(lv') in ext *)
           intros v' HextSome.
           generalize (Hext (fapply f lv')); intros Hextf.
           rewrite HextSome in Hextf.
@@ -2595,8 +2629,7 @@ Proof.
           + apply Hextf in Hneq.
             rewrite Hassoc in Hneq.
             discriminate.
-        - (* cas où f(lv') n’est pas dans ext *)
-          intros.
+        - intros.
           apply assoc_app_eq_Some; right; split; assumption.
       }
 
@@ -2656,8 +2689,8 @@ Proof.
 Qed.
 
 Lemma first_activations_residues_activation i s p c1 t c2 v :
-  let proof_tree := cbv_update i s p c1 t c2 v in
-  wf proof_tree ->
+  let π := cbv_update i s p c1 t c2 v in
+  wf π ->
   Forall2 (fun p' t' =>
     match (proj_left p', t') with
     | (fapply f lv, fapply f' lt) =>
@@ -2665,21 +2698,21 @@ Lemma first_activations_residues_activation i s p c1 t c2 v :
       Forall2 (fun t v => cache_lookup (cache_left p') t = v) lt lv
     | _ => False
     end)
-    (first_activations_and_semi proof_tree)
+    (first_activations_and_semi π)
     (fapplies_in_term (proj_left p)).
 Proof.
-intros proof_tree H_wf.
+intros π H_wf.
 unfold first_activations_and_semi.
 simpl.
 remember (proj_left p) as t' eqn: H_t'_proj.
-unfold proof_tree in H_wf.
+unfold π in H_wf.
 assert (wf p) as Hwf_p.
 {
   simpl in H_wf.
   destruct t as [ | | f lv ]; try tauto.
   decompose record H_wf; auto.
 }
-generalize p H_t'_proj Hwf_p ; clear i s p c1 t c2 v proof_tree H_wf H_t'_proj Hwf_p.
+generalize p H_t'_proj Hwf_p ; clear i s p c1 t c2 v π H_wf H_t'_proj Hwf_p.
 induction t' as [ | c lt IH | f lt IH ] using term_ind2; intros p H_t_proj Hwf_p.
 
 - destruct p as [ lp c1 t c2 v | lp p' c1 t c2 v | i s p' c1 t c2 v | c t v ]; simpl in *; subst; try tauto.
@@ -2896,21 +2929,18 @@ Qed.
 
 Lemma nb_nodes_bound i s p' c1 t c2 v :
   let p := cbv_update i s p' c1 t c2 v in
-  nb_nodes p <= suml (map nb_judgements_sub (activations p)) + length (activations p).
+  #ℐᵃ⁺ᵖ p <= suml (map #𝓓 (ℐᵃ p)) + 𝓐 p.
 Proof.
 intro p.
-pattern p.
+pattern p. unfold 𝓐.
 apply cbv_big_induction.
 clear p.
 intros i' s' p'' c1' t' c2' v' IH.
-rewrite activations_first_activations.
+rewrite ℐᵃ_first_activations.
 simpl in *.
 rewrite <- plus_n_Sm.
 apply le_n_S.
-transitivity (
-  nb_judgements_sub_rec p'' +
-  suml (map nb_nodes (first_activations_rec p''))
-).
+transitivity (#𝓓' p'' + suml (map nb_nodes (first_activations_rec p''))).
 
 - clear IH.
   induction p'' as [ [ | p lp ] c1'' t'' c2'' v'' IH_lp | lp p c1'' t'' c2'' v'' IH_lp IH_p | i'' s'' p c1'' t'' c2'' v'' IH_p | c t'' v'' ] using cbv_ind2;
@@ -2944,36 +2974,32 @@ transitivity (
 - rewrite <- plus_assoc.
   apply plus_le_compat_l.
   transitivity (
-    suml (map (fun x => suml (map nb_judgements_sub (activations x)) + length (activations x)) (first_activations_rec p''))
-  ).
+    suml (map (fun x => suml (map #𝓓 (ℐᵃ x)) + length (ℐᵃ x)) (first_activations_rec p''))).
 
   + apply suml_map_le.
     intros p Hp.
     apply IH; trivial.
 
-  + clear IH.
+  + clear IH. simpl.
     rewrite length_flat_map, suml_map_plus, map_map, map_flat_map, suml_flat_map_map.
     trivial.
 Qed.
 
 Lemma nb_judgements_bound i s p' c1 t c2 v :
   let p := cbv_update i s p' c1 t c2 v in
-  nb_judgements p <= suml (map nb_judgements_sub (activations p)) + length (activations p) + nb_read p.
+  #ℐ p <= suml (map #𝓓 (ℐᵃ p)) + 𝓐 p + #ℐˢ p.
 Proof.
 induction p' as [ lp c1' t' c2' v' IH1 | lp p c1' t' c2' v' IH1 IH2 | i' s' p c1' t' c2' v' IH | c t' v' ] using cbv_ind2; simpl in *.
 
-- rewrite <- plus_n_Sm.
+- simpl. rewrite <- plus_n_Sm.
   do 2 apply le_n_S.
   fold plus.
-  assert (
-    forall p, In p lp ->
-      nb_judgements p <=
-      nb_judgements_sub_rec p + suml (map nb_judgements_sub (activations p)) +
-      length (activations p) + nb_read p
+  assert (forall p, In p lp ->
+      #ℐ p <= #𝓓' p + suml (map #𝓓 (ℐᵃ p)) +𝓐 p + #ℐˢ p
   ) as H. {
     intros p Hp.
     generalize (IH1 p Hp).
-    omega.
+    simpl. omega.
   }
   clear IH1.
   apply suml_map_le in H.
@@ -2986,24 +3012,14 @@ induction p' as [ lp c1' t' c2' v' IH1 | lp p c1' t' c2' v' IH1 IH2 | i' s' p c1
 - rewrite <- plus_n_Sm.
   do 2 apply le_n_S.
   fold plus.
-  assert (
-    forall p0 : cbv,
-    In p0 lp ->
-    nb_judgements p0 <=
-    nb_judgements_sub_rec p0 +
-    suml (map nb_judgements_sub (activations p0)) +
-    length (activations p0) + nb_read p0    
-  ) as H1. {
+  assert (forall p0 : cbv, In p0 lp ->
+      #ℐ p0 <= #𝓓' p0 + suml (map #𝓓 (ℐᵃ p0)) + 𝓐 p0 + #ℐˢ p0) as H1. {
     intros p' Hp.
     generalize (IH1 p' Hp).
-    omega.
+    simpl. omega.
   }
-  assert (
-    nb_judgements p <=
-    nb_judgements_sub_rec p + suml (map nb_judgements_sub (activations p)) +
-    length (activations p) + nb_read p
-  ) as H2.
-  omega.
+  assert (#ℐ p <= #𝓓' p + suml (map #𝓓 (ℐᵃ p)) + 𝓐 p + #ℐˢ p) as H2.
+  simpl. omega.
   clear IH1 IH2.
   apply suml_map_le in H1.
   etransitivity.
@@ -3017,15 +3033,15 @@ induction p' as [ lp c1' t' c2' v' IH1 | lp p c1' t' c2' v' IH1 IH2 | i' s' p c1
   + clear H1 H2.
   do 3 rewrite suml_map_plus.
   rewrite app_length, map_app, suml_app, length_flat_map, map_map, map_flat_map, suml_flat_map, map_map.
-  omega.
- 
+  simpl. omega.
+
 - omega.
 
 - trivial.
 Qed.
 
-Lemma nb_judgements_sub_rec_bound p :
-  wf p -> nb_judgements_sub_rec p <= term_size (proj_left p).
+Lemma nb_nb_judgement_rec_bound p :
+  wf p -> #𝓓' p <= ╎proj_left p╎.
 Proof.
 intros H_wf_p.
 induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH _ | n s p c1 t c2 v _  | c t v ] using cbv_ind2; simpl in *.
@@ -3088,22 +3104,22 @@ induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH _ | n s p c1 t c2 v _  | c 
 - apply le_0_n.
 Qed.
 
-Lemma nb_judgements_sub_bound i s p c1 t c2 v :
+Lemma nb_ℐᵖ_bound i s p c1 t c2 v :
   wf (cbv_update i s p c1 t c2 v) ->
-  nb_judgements_sub (cbv_update i s p c1 t c2 v) <= activation_bound prog (term_size t).
+  #𝓓 (cbv_update i s p c1 t c2 v) <= 𝓡 prog (╎t╎).
 Proof.
-intros H_wf_proof_tree.
-assert (In (cbv_update i s p c1 t c2 v) (activations (cbv_update i s p c1 t c2 v))) as H_p_activation.
+intros H_wf_π.
+assert (In (cbv_update i s p c1 t c2 v) (ℐᵃ (cbv_update i s p c1 t c2 v))) as H_p_activation.
 
 - simpl; tauto.
 
-- generalize (activations_wf H_wf_proof_tree H_p_activation); intro H_wf_p.
-  generalize (activation_bound_spec s H_wf_proof_tree H_p_activation).
+- generalize (ℐᵃ_wf H_wf_π H_p_activation); intro H_wf_p.
+  generalize (𝓡_spec s H_wf_π H_p_activation).
   simpl; intro H.
-  transitivity (term_size (subst s (rhs_of_rule (nth i prog rule_default)))); [clear H | trivial].
-  transitivity (term_size (proj_left p)).
+  transitivity (╎subst s (rhs_of_rule (nth i prog rule_default))╎); [clear H | trivial].
+  transitivity (╎proj_left p╎).
 
-  + apply nb_judgements_sub_rec_bound; trivial.
+  + apply nb_nb_judgement_rec_bound; trivial.
     apply (wf_cbv_update H_wf_p).
 
   + simpl in H_wf_p.
@@ -3115,7 +3131,7 @@ Qed.
 
 Lemma right_from_activation_or_from_left p : wf p ->
   maxl (map (fun tv : term * value => value_size (snd tv)) (cache_right p)) <=
-  max (max_active_size p) (maxl (map (fun tv : term * value => value_size (snd tv)) (cache_left p))).
+  max (𝓢 p) (maxl (map (fun tv : term * value => value_size (snd tv)) (cache_left p))).
 Proof.
 intro H_wf.
 induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v IH_p  | c t v ] using cbv_ind2; simpl in *.
@@ -3186,7 +3202,7 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 
 
       - clear IH.
         etransitivity; [apply H2 | clear H2].
-        rewrite (max_comm (max_active_size p')), <- max_assoc.
+        rewrite (max_comm (𝓢 p')), <- max_assoc.
         apply NPeano.Nat.max_le_compat_l.
         apply IH_lp; tauto.
 
@@ -3222,7 +3238,7 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 
 
       - clear IH.
         etransitivity; [apply H2 | clear H2].
-        rewrite (max_comm (max_active_size p')), <- max_assoc.
+        rewrite (max_comm (𝓢 p')), <- max_assoc.
         apply NPeano.Nat.max_le_compat_l.
         decompose record H5; auto.
 
@@ -3236,7 +3252,7 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 
   apply IH_p in H10.
   clear IH_p.
   simpl.
-  destruct (max_active_size p) as [ | m ]; lia.
+  destruct (𝓢 p) as [ | m ]; lia.
 
 - apply le_n.
 Qed.
@@ -3244,7 +3260,7 @@ Qed.
 Lemma right_from_activation_or_from_left_path lp c1 c2 : andl (map wf lp) ->
   cache_path c1 c2 lp = true ->
   maxl (map (fun tv : term * value => value_size (snd tv)) c2) <=
-  max (maxl (map max_active_size lp)) (maxl (map (fun tv : term * value => value_size (snd tv)) c1)).
+  max (maxl (map 𝓢 lp)) (maxl (map (fun tv : term * value => value_size (snd tv)) c1)).
 Proof.
 revert c1.
 induction lp as [ | p lp IH]; simpl.
@@ -3262,14 +3278,14 @@ induction lp as [ | p lp IH]; simpl.
   apply IH in H4; trivial.
   clear IH.
   etransitivity; [apply H4 | clear H4].
-  rewrite (max_comm (max_active_size p)), <- max_assoc.
+  rewrite (max_comm (𝓢 p)), <- max_assoc.
   apply NPeano.Nat.max_le_compat_l.
   apply right_from_activation_or_from_left.
   trivial.
 Qed.
 
 Lemma value_size_bounded_by_nb_judgements p :
-  wf p -> value_size (proj_right p) <= (1 + max (max_active_size p) (maxl (map (fun tv => value_size (snd tv)) (cache_left p)))) * nb_judgements p.
+  wf p -> value_size (proj_right p) <= (1 + max (𝓢 p) (maxl (map (fun tv => value_size (snd tv)) (cache_left p)))) * #ℐ p.
 Proof.
 intro H.
 induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v IH | c t v ] using cbv_ind2; simpl in *.
@@ -3282,11 +3298,11 @@ induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v I
   apply le_n_S.
   rewrite map_map.
   transitivity (
-    suml (map (fun p => nb_judgements p +
-     max (max_active_size p)
+    suml (map (fun p => #ℐ p +
+     max (𝓢 p)
        (maxl
           (map (fun tv : term * value => value_size (snd tv)) (cache_left p))) *
-     nb_judgements p) lp)
+     #ℐ p) lp)
   ).
 
   + apply suml_map_le.
@@ -3315,12 +3331,12 @@ induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v I
 
     * clear H2.
       do 2 rewrite mult_succ_r.
-      set (a := map nb_judgements lp).
-      set (b := map max_active_size lp).
-      set (d := max_active_size p).
+      set (a := map #ℐ lp).
+      set (b := map 𝓢 lp).
+      set (d := 𝓢 p).
       set (e := map (fun tv : term * value => value_size (snd tv)) (cache_left p)).
       set (f := map (fun tv : term * value => value_size (snd tv)) (cache_right p)).
-      {transitivity (max d (maxl e) * nb_judgements p + (max (maxl b) (max d (maxl e)) * suml a + max (maxl b) (max d (maxl e)))).
+      {transitivity (max d (maxl e) * #ℐ p + (max (maxl b) (max d (maxl e)) * suml a + max (maxl b) (max d (maxl e)))).
 
       - apply plus_le_compat_l.
         apply plus_le_compat.
@@ -3372,15 +3388,15 @@ induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v I
       | |- _ + max ?x _ * _ <= _ => set (a := x)
       end.
       do 3 rewrite mult_succ_r.
-      rewrite (plus_n_Sm (nb_judgements p + suml (map nb_judgements lp))).
+      rewrite (plus_n_Sm (#ℐ p + suml (map #ℐ lp))).
       rewrite <- plus_assoc.
       apply plus_le_compat_l.
       set (b := map (fun tv : term * value => value_size (snd tv)) c1').
       set (d := map (fun tv : term * value => value_size (snd tv)) c1).
-      set (e := map max_active_size lp).
-      set (g := suml (map nb_judgements lp)).
-      {transitivity (max a (max (maxl e) (maxl d)) * nb_judgements p + max a (max (maxl e) (maxl d))).
-      
+      set (e := map 𝓢 lp).
+      set (g := suml (map #ℐ lp)).
+      {transitivity (max a (max (maxl e) (maxl d)) * #ℐ p + max a (max (maxl e) (maxl d))).
+
       - apply plus_le_compat.
 
         + apply mult_le_compat_r.
@@ -3393,7 +3409,7 @@ induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v I
       - rewrite mult_plus_distr_l.
         rewrite (max_assoc a).
         set (h := max (max a (maxl e)) (maxl d)).
-        transitivity (S (h * nb_judgements p + h * g + h) + h); try omega.
+        transitivity (S (h * #ℐ p + h * g + h) + h); try omega.
         apply le_plus_trans.
         apply le_S.
         apply plus_le_compat_r.
@@ -3443,7 +3459,7 @@ induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v I
     trivial.
 
   + clear IH.
-    set (a := match max_active_size p with
+    set (a := match 𝓢 p with
      | 0 =>
          S
            (suml
@@ -3466,14 +3482,14 @@ induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v I
     rewrite mult_succ_r.
     do 2 rewrite plus_n_Sm.
     apply plus_le_compat_l.
-    destruct (max_active_size p) as [ | m].
+    destruct (𝓢 p) as [ | m].
 
     * rewrite max_0_l.
-      transitivity (max a b * nb_judgements p); try omega.
+      transitivity (max a b * #ℐ p); try omega.
       apply mult_le_compat_r.
       apply NPeano.Nat.le_max_r.
 
-    * transitivity (max a b * nb_judgements p); try omega.
+    * transitivity (max a b * #ℐ p); try omega.
       apply mult_le_compat_r.
       apply NPeano.Nat.max_le_compat_r.
       unfold a.
@@ -3483,21 +3499,21 @@ induction p as [ lp c1 t c2 v IH | lp p c1 t c2 v IH_lp IH_p | n s p c1 t c2 v I
 - destruct t as [ | | f lv]; try tauto.
   destruct H as [Ht [lv' Hlv']].
   apply assoc_in in Ht.
-  + assert (Hin : In (value_size v) (map (fun tv : term * value => value_size (snd tv)) c)) by 
+  + assert (Hin : In (value_size v) (map (fun tv : term * value => value_size (snd tv)) c)) by
       (rewrite in_map_iff; exists (fapply f lv, v); tauto).
     apply maxl_is_max in Hin.
     omega.
-  
+
   + intros.
     eapply term_beq_eq; eauto.
 Qed.
 
 Lemma size_bounded_nb_size_judgements p :
-  size p <= nb_judgements p * max_judgement_size p + cache_size (cache_left p).
+  ∣p∣ <= #ℐ p * max_judgement_size p + cache_size (cache_left p).
 Proof.
 unfold size.
 apply plus_le_compat_r.
-induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 v IH_p | c t v] using cbv_ind2. (*unfold size; simpl.*)
+induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 v IH_p | c t v] using cbv_ind2.
 
 - etransitivity.
 
@@ -3567,25 +3583,26 @@ induction p as [ lp c1 t c2 v IH_lp | lp p c1 t c2 v IH_lp IH_p | i s p c1 t c2 
 - simpl; omega.
 Qed.
 
-Lemma nb_judgements_sub_bound_gen : forall p p',
-  let S := max_active_size p in
+(** Proposition 33 *)
+Lemma nb_ℐᵖ_bound_gen : forall p p',
+  let S := 𝓢 p in
   wf p ->
-  In p' (activations p) -> nb_judgements_sub p' <= activation_bound prog S.
+  In p' (ℐᵃ p) -> #𝓓 p' <= 𝓡 prog S.
 Proof.
 intros p p' S H_wf_p Hp'.
 assert (wf p') as H1. {
-  apply activations_wf with p.
+  apply ℐᵃ_wf with p.
   exact H_wf_p.
   assumption.
 }
 generalize Hp'; intro H2p'.
 apply activation_is_function in Hp'.
-apply le_max_active_size in H2p'.
+apply le_𝓢 in H2p'.
 destruct Hp' as (i' & s' & p'' & c1 & t' & c2 & v' & Hp').
 subst p'.
 etransitivity.
 
-- apply nb_judgements_sub_bound.
+- apply nb_ℐᵖ_bound.
     assumption.
 
 - simpl in H1.
@@ -3593,17 +3610,18 @@ etransitivity.
     destruct H1 as (H1 & lp & t' & H2 & H3 & H4 & H5 & H6 & H7 & H8 & H9 & H10).
     subst lv v' c1 c2.
     simpl in H2p'.
-    apply activation_bound_monotone.
+    apply 𝓡_monotone.
     etransitivity; [idtac | apply H2p'].
     simpl; omega.
 Qed.
 
+(** First part of Proposition 34*)
 Lemma nb_judgements_bound_gen : forall i s p' c1 t c2 v,
   let p := cbv_update i s p' c1 t c2 v in
-  let A := length (activations p) in
-  let S := max_active_size p in
+  let A := 𝓐 p in
+  let S := 𝓢 p in
   wf p ->
-  nb_judgements p <= A * activation_bound prog S + A + (Datatypes.S (max_arity * nb_nodes p)).
+  #ℐ p <= A * 𝓡 prog S + A + (Datatypes.S (max_arity * #ℐᵃ⁺ᵖ p)).
 Proof.
 intros i s p' c1 t c2 v p A S H_wf_p.
 etransitivity.
@@ -3612,16 +3630,16 @@ unfold A, p.
 apply plus_le_compat.
 
 - apply plus_le_compat_r.
-  set (list_activ := activations (cbv_update i s p' c1 t c2 v)).
+  set (list_activ := ℐᵃ (cbv_update i s p' c1 t c2 v)).
   etransitivity.
 
   + apply suml_le_len_times_bound.
-    instantiate (1 := activation_bound prog S).
+    instantiate (1 := 𝓡 prog S).
     intros x H_x.
     apply in_map_iff in H_x.
     destruct H_x as [ p'' [ H_x1 H_x2 ]].
     subst x.
-    apply nb_judgements_sub_bound_gen; tauto.
+    apply nb_ℐᵖ_bound_gen; tauto.
 
   + apply mult_le_compat_r.
     rewrite map_length.
@@ -3630,7 +3648,7 @@ apply plus_le_compat.
 - apply nb_read_bound; trivial.
 Qed.
 
-Lemma cache_path_incl : forall lp c1 c2, 
+Lemma cache_path_incl : forall lp c1 c2,
   andl (map wf lp) -> cache_path c1 c2 lp = true -> incl c1 c2.
 Proof.
   induction lp; intros c1 c2 Hwf path.
@@ -3638,11 +3656,11 @@ Proof.
     rewrite cache_beq_eq in path.
     subst c1.
     apply incl_refl.
-    
+
   - simpl in path.
     rewrite andb_true_iff in path.
     rewrite cache_beq_eq in path.
-    destruct Hwf as [Hwfa Hwf].		
+    destruct Hwf as [Hwfa Hwf].
     apply incl_tran with (cache_right a).
 
     + replace c1 with (cache_left a) by
@@ -3652,19 +3670,19 @@ Proof.
       rewrite Hwfa.
       apply incl_appr.
       apply incl_refl.
-      
+
     + apply IHlp; tauto.
 Qed.
 
-Lemma InCBV_cache_right_incl p proof_tree :
-  wf proof_tree ->
-  InCBV p proof_tree ->
-  incl (cache_right p) (cache_right proof_tree).
+Lemma InCBV_cache_right_incl p π :
+  wf π ->
+  InCBV p π ->
+  incl (cache_right p) (cache_right π).
 Proof.
-  induction proof_tree using cbv_ind2; intros Hwf Hin.
+  induction π using cbv_ind2; intros Hwf Hin.
   - destruct Hin as [Heq | Hin].
     + rewrite Heq; apply incl_refl.
-    
+
     + apply orl_map in Hin.
       destruct Hin as (p0 & Hin0 & Hinpp0).
       simpl in*.
@@ -3678,32 +3696,32 @@ Proof.
       destruct Hwflp as [_ [Hwfp0 Hwf2]].
       apply incl_tran with (cache_right p0).
       * apply H; [auto with* | |]; tauto.
-      
+
       * apply cache_path_app in path.
         simpl in path.
         rewrite andb_true_iff in path.
         apply cache_path_incl with l2; tauto.
-        
+
   - destruct Hin as [Heq | [Hinp | Hin]].
     + rewrite Heq; apply incl_refl.
-    
+
     + simpl.
-      apply incl_tran with (cache_right proof_tree).
-      * apply IHproof_tree.
+      apply incl_tran with (cache_right π).
+      * apply IHπ.
         simpl in Hwf.
-        destruct proof_tree; try tauto; destruct t; try tauto; destruct t0; try tauto.
+        destruct π; try tauto; destruct t; try tauto; destruct t0; try tauto.
         assumption.
-        
-      * simpl in Hwf.  destruct proof_tree; try tauto; destruct t; try tauto; destruct t0; try tauto; simpl;
+
+      * simpl in Hwf.  destruct π; try tauto; destruct t; try tauto; destruct t0; try tauto; simpl;
         destruct Hwf as [Hwf _]; subst c2; apply incl_refl.
-           
+
     + apply orl_map in Hin.
       destruct Hin as (p0 & Hin0 & Hinpp0).
-      specialize (H p0 Hin0).	
+      specialize (H p0 Hin0).
       apply in_split in Hin0.
       destruct Hin0 as (l1 & l2 & Hl12).
       subst lp.
-      destruct proof_tree; try tauto; destruct t; try tauto; destruct t0; simpl in Hwf;try tauto; simpl in *;
+      destruct π; try tauto; destruct t; try tauto; destruct t0; simpl in Hwf;try tauto; simpl in *;
        (decompose record Hwf;
         rewrite map_app, andl_app in H4;
         simpl in H4;
@@ -3714,24 +3732,24 @@ Proof.
         simpl in H2;
         rewrite andb_true_iff in H2;
         decompose record H2);
-          [apply incl_tran with (cache_right proof_tree); [| subst c0; subst c2; auto with *];
-          apply incl_tran with (cache_left proof_tree); [| rewrite cache_content; auto with *] |];
+          [apply incl_tran with (cache_right π); [| subst c0; subst c2; auto with *];
+          apply incl_tran with (cache_left π); [| rewrite cache_content; auto with *] |];
         subst c;
         apply cache_path_incl with l2; assumption.
-        
+
  - destruct Hin as [Heq | Hin].
     + rewrite Heq; apply incl_refl.
-    
+
     + simpl in *.
       destruct t; try tauto.
       destruct Hwf as (_ & lp & t & Hw).
-      apply incl_tran with (cache_right proof_tree).
-      * apply IHproof_tree; tauto.
-      
-      * replace c2 with ((fapply f l, v) :: cache_right proof_tree) by
+      apply incl_tran with (cache_right π).
+      * apply IHπ; tauto.
+
+      * replace c2 with ((fapply f l, v) :: cache_right π) by
           (decompose record Hw; apply eq_sym; assumption).
         auto with *.
-        
+
  - destruct Hin; [subst p; apply incl_refl | tauto].
 Qed.
 
@@ -3750,34 +3768,35 @@ Proof.
   assert (incl c (cache_right p)).
   * replace c with (cache_right (cbv_read c (fapply f l) v)) by trivial.
     apply (InCBV_cache_right_incl Hwf); trivial.
-    
+
   * apply H; assumption.
 Qed.
 
 Lemma term_size_proj_left_bound : forall i s p' c1 t c2 v,
   let p := cbv_update i s p' c1 t c2 v in
-  let S := max_active_size p in
+  let S := 𝓢 p in
   wf p ->
   forall p',
-  InCBV p' p -> term_size (proj_left p') <= activation_bound prog S + S + cache_size c1.
+  InCBV p' p -> ╎proj_left p'╎ <= 𝓡 prog S + S + cache_size c1.
 Proof.
-(* on utilise cbv_reverse_induction pour prouver ≤ activation S + S
-   cas de base : c’est un cbv_function, donc on est borné par S
-   cas inductifs :
-     le sous-arbre d’un cbv_function est borné par act S,
-     les sous-arbres d’un cbv_constr sont bornés par le cbv_constr lui-même,
-     les sous-arbres lp d’un cbv_split sont bornés par le cbv_split,
-     le sous-arbre p d’un cbv_split est un cbv_function dans les arbres bien formés, donc borné par S *)
+(** We use cbv_reverse_induction to prove ≤ activation S + S
+   - base case: it is a cbv_function, thus bounded by S
+   - cas inductifs :
+     - the sub-tree of a cbv_function is bounded by act S,
+     - the sub-trees of a cbv_constr are bounded by the cbv_constr itself,
+     -  cbv_split:
+       - the sub-trees in lp are bounded by the cbv_split itself,
+       - the sub-tree p is a cbv_function, thus bounded by S *)
 
 intros i s p0 c1 t c2 v p S H_wf_p.
 apply cbv_reverse_induction.
 
-- (* Cas de base, borne la taille du terme gauche de la conclusion finale *)
+- (* base case *)
   transitivity S.
 
   + unfold p, S.
     simpl.
-    transitivity (term_size t + value_size v).
+    transitivity (╎t╎ + value_size v).
 
     * apply le_plus_l.
 
@@ -3785,9 +3804,9 @@ apply cbv_reverse_induction.
 
   + omega.
 
-- (* Cas inductif, cbv_constr *)
+- (* cbv_constr *)
   intros lp c1' t' c2' v' H_p'_in_p IH p'' H_p''_in_lp.
-  transitivity (term_size (proj_left (cbv_constr lp c1' t' c2' v'))).
+  transitivity (╎proj_left (cbv_constr lp c1' t' c2' v')╎).
 
   + generalize (wf_InCBV_wf H_wf_p H_p'_in_p).
     simpl.
@@ -3804,39 +3823,39 @@ apply cbv_reverse_induction.
 
   + exact IH.
 
-- (* Cas inductif, cbv_split *)
+- (* cbv_split *)
   intros lp p' c1' t' c2' v' H_in_p IH p'' [ H_p''_in | H_p''_in ].
 
-  + (* cas p'' = p' *)
+  + (* p'' = p' *)
     subst p''. simpl.
     transitivity (S + cache_size c1).
-      (* apply le_max_active_size. *)
+      (* apply le_𝓢. *)
       generalize (wf_InCBV_wf H_wf_p H_in_p).
       intro H_wf_split.
       simpl in H_wf_split.
       {destruct p' as [ | | i' s' p' c1'' t'' c2'' v'' | c t'' v'' ]; try tauto.
 
-      - (* cas p' est un cbv_update *)
+      - (* cbv_update *)
 
-        transitivity (term_size (proj_left (cbv_update i' s' p' c1'' t'' c2'' v'')) +
+        transitivity (╎proj_left (cbv_update i' s' p' c1'' t'' c2'' v'')╎ +
                        value_size (proj_right (cbv_update i' s' p' c1'' t'' c2'' v''))).
         + apply le_plus_l.
-        
+
         + transitivity S.
-          * apply le_max_active_size.
-            eapply cbv_update_in_activations_InCBV; try reflexivity.
+          * apply le_𝓢.
+            eapply cbv_update_in_ℐᵃ_InCBV; try reflexivity.
             apply InCBV_trans with (cbv_split lp (cbv_update i' s' p' c1'' t'' c2'' v'') c1' t' c2' v'); trivial.
             simpl; tauto.
-            
+
           * apply le_plus_l.
 
-      - (* cas p' est un cbv_read *) 
+      - (* cbv_read *)
         destruct t''; try tauto; destruct t'; try tauto.
         replace c2 with (cache_right (cbv_update i s p0 c1 t c2 v)) in *; trivial.
         assert(In (fapply f l, v') (cache_right (cbv_update i s p0 c1 t c2 v))).
         + apply InCBV_read_cache_right with c.
           * assumption.
-          
+
           * simpl in H_in_p.
             simpl.
             right.
@@ -3846,7 +3865,7 @@ apply cbv_reverse_induction.
             simpl in Hneq.
             apply InCBV_trans with (cbv_split lp (cbv_read c (fapply f l) v') c1' (fapply f0 l0) c2' v');
             simpl; tauto.
-            
+
         + rewrite cache_content in H; [| assumption].
           apply in_app_or in H.
           destruct H as [Hleft | Hright].
@@ -3856,33 +3875,33 @@ apply cbv_reverse_induction.
             simpl proj_left.
             unfold cbv_cache_entry in Hcache.
             replace (fapply f l) with (proj_left x) by (inversion Hcache; trivial).
-            transitivity (term_size (proj_left x) + value_size(proj_right x)); [omega|].
-            apply le_max_active_size.
+            transitivity (╎proj_left x╎ + value_size(proj_right x)); [omega|].
+            apply le_𝓢.
             eapply Permutation_in.
             apply Permutation_sym.
-            apply activations_cache_order_are_activations.
+            apply ℐᵃ_cache_order_are_ℐᵃ.
             assumption.
 
           * simpl in Hright.
             transitivity (cache_size c1); [|omega].
             unfold cache_size.
             simpl proj_left.
-            transitivity (term_size (fst (fapply f l, v')) + value_size (snd (fapply f l, v'))); [auto with*|].
+            transitivity (╎fst (fapply f l, v')╎ + value_size (snd (fapply f l, v'))); [auto with*|].
             apply in_le_suml.
             apply in_map_iff.
             eauto.
 }
-         
+
     * omega.
 
-  + (* cas p'' dans lp, similaire au cas récursif de cbv_constr *)
-    transitivity (term_size (proj_left (cbv_split lp p' c1' t' c2' v'))).
+  + (* p'' ∈ lp, similar to the cbv_constr case *)
+    transitivity (╎proj_left (cbv_split lp p' c1' t' c2' v')╎).
 
     * generalize (wf_InCBV_wf H_wf_p H_in_p).
       simpl.
       {destruct p' as [ | | i' s' p' c1'' t'' c2'' v'' | c t'' v'' ]; try tauto.
 
-      + (* cas p' est un cbv_update *)
+      + (* cbv_update *)
         destruct t'' as [ | | f lv ]; try tauto.
         destruct t' as [ | | f' lt ]; try tauto.
         intros (_ & _ & H_lt_lp & _ & _ & H_f & H_v & _).
@@ -3894,7 +3913,7 @@ apply cbv_reverse_induction.
         apply in_map.
         assumption.
 
-      + (* cas p' est un cbv_read *)
+      + (* cbv_read *)
         destruct t'' as [ | | f lv ]; try tauto.
         destruct t' as [ | | f' lt ]; try tauto.
         intros (H1 & H2 & H3 & H4 & H5 & H6 & H7 & H8 & H9).
@@ -3907,14 +3926,14 @@ apply cbv_reverse_induction.
 
     * assumption.
 
-- (* Cas inductif, cbv_update *)
+- (* cbv_update *)
   intros i' s' p' c1' t' c2' v' H_in_p IH.
-  transitivity (activation_bound prog (term_size t')).
+  transitivity (𝓡 prog (╎t'╎)).
 
   + change t' with (proj_left (cbv_update i' s' p' c1' t' c2' v')).
     replace (proj_left p') with (subst s' (rhs_of_rule (nth i' prog rule_default))).
 
-    * generalize (@activation_bound_spec s p H_wf_p (cbv_update i' s' p' c1' t' c2' v')).
+    * generalize (@𝓡_spec s p H_wf_p (cbv_update i' s' p' c1' t' c2' v')).
       simpl.
       intro H.
       apply H.
@@ -3927,7 +3946,7 @@ apply cbv_reverse_induction.
           assumption.
 
         - right.
-          apply (@cbv_update_in_activations_InCBV p0 (cbv_update i' s' p' c1' t' c2' v') i' s' p' c1' t' c2' v'); trivial.
+          apply (@cbv_update_in_ℐᵃ_InCBV p0 (cbv_update i' s' p' c1' t' c2' v') i' s' p' c1' t' c2' v'); trivial.
       }
 
     * generalize (wf_InCBV_wf H_wf_p H_in_p).
@@ -3941,24 +3960,25 @@ apply cbv_reverse_induction.
       trivial.
 
   + apply le_plus_trans.
-    transitivity(activation_bound prog S); try omega.
-    apply activation_bound_monotone.
-    transitivity (term_size (proj_left (cbv_update i' s' p' c1' t' c2' v')) + value_size (proj_right (cbv_update i' s' p' c1' t' c2' v'))).
+    transitivity(𝓡 prog S); try omega.
+    apply 𝓡_monotone.
+    transitivity (╎proj_left (cbv_update i' s' p' c1' t' c2' v')╎ + value_size (proj_right (cbv_update i' s' p' c1' t' c2' v'))).
 
     * apply le_plus_trans.
       simpl.
       trivial.
 
-    * apply le_max_active_size.
-      apply cbv_update_in_activations_InCBV with i' s' p' c1' t' c2' v'; trivial.
+    * apply le_𝓢.
+      apply cbv_update_in_ℐᵃ_InCBV with i' s' p' c1' t' c2' v'; trivial.
 Qed.
 
+(** Last line of Proposition 34. *)
 Lemma nb_nodes_bound_gen i s p' c1 t c2 v :
   let p := cbv_update i s p' c1 t c2 v in
-  let A := length (activations p) in
-  let S := max_active_size p in
+  let A := 𝓐 p in
+  let S := 𝓢 p in
   wf p ->
-  nb_nodes p <= A * (1 + activation_bound prog S).
+  #ℐᵃ⁺ᵖ p <= A * (1 + 𝓡 prog S).
 Proof.
 intros p A S H_wf_p.
 etransitivity.
@@ -3969,7 +3989,7 @@ fold p.
 etransitivity. {
   apply suml_map_le.
   intros p'' Hp''.
-  apply nb_judgements_sub_bound_gen with (p := p).
+  apply nb_ℐᵖ_bound_gen with (p := p).
   exact H_wf_p.
   tauto.
 }
@@ -3980,15 +4000,15 @@ Qed.
 
 Lemma size_judgement : forall i s p' c1 t c2 v,
   let p := cbv_update i s p' c1 t c2 v in
-  let A := length (activations p) in
-  let S := max_active_size p in
+  let A := 𝓐 p in
+  let S := 𝓢 p in
   let C := maxl (map (fun tv : term * value => value_size (snd tv)) c1) in
   wf p ->
   max_judgement_size p <=
-  activation_bound prog S + S + cache_size c1 +
-  (1 + max S C) * (1 + (A * activation_bound prog S + A) + max_arity * (A * activation_bound prog S + A)).
+  𝓡 prog S + S + cache_size c1 +
+  (1 + max S C) * (1 + (A * 𝓡 prog S + A) + max_arity * (A * 𝓡 prog S + A)).
 Proof.
-intros i s p0 c1 t c2 v p A S C H_wf_p.
+intros i s p0 c1 t c2 v p A S C H_wf_p. unfold 𝓐 in A.
 etransitivity. {
   apply judgement_size_le_projs_size. }
   apply plus_le_compat.
@@ -3996,7 +4016,7 @@ etransitivity. {
 -  apply term_size_proj_left_bound; trivial.
   apply InCBV_proj_left_max_size.
 
-- transitivity ((1 + max S C) * nb_judgements p).
+- transitivity ((1 + max S C) * #ℐ p).
 
   + clear A.
     subst C.
@@ -4035,9 +4055,9 @@ etransitivity. {
         destruct H2 as (lp1 & lp2 & H2).
         subst lp.
         transitivity (
-          nb_judgements p +
-          max (max_active_size p) (maxl (map (fun tv : term * value => value_size (snd tv)) (cache_left p))) *
-          nb_judgements p
+          #ℐ p +
+          max (𝓢 p) (maxl (map (fun tv : term * value => value_size (snd tv)) (cache_left p))) *
+          #ℐ p
         ); trivial.
         apply le_S.
         apply plus_le_compat.
@@ -4176,12 +4196,12 @@ etransitivity. {
         destruct H2 as (lp1 & lp2 & H2).
         subst lp.
         transitivity (
-          nb_judgements p +
-          max (max_active_size p) (maxl (map (fun tv : term * value => value_size (snd tv)) (cache_left p))) *
-          nb_judgements p
+          #ℐ p +
+          max (𝓢 p) (maxl (map (fun tv : term * value => value_size (snd tv)) (cache_left p))) *
+          #ℐ p
         ); trivial.
         apply le_S.
-        rewrite <- plus_assoc, (plus_comm (nb_judgements p')).
+        rewrite <- plus_assoc, (plus_comm (#ℐ p')).
         apply le_plus_trans.
         apply plus_le_compat.
 
@@ -4294,8 +4314,8 @@ etransitivity. {
     etransitivity. {
       apply nb_judgements_bound_gen; trivial. }
     simpl.
-    assert (activation_bound prog (max (term_size t + value_size v) (max_active_size p0)) <= activation_bound prog S) as H. {
-      apply activation_bound_monotone; trivial. }
+    assert (𝓡 prog (max (╎t╎ + value_size v) (𝓢 p0)) <= 𝓡 prog S) as H. {
+      apply 𝓡_monotone; trivial. }
     etransitivity. {
       do 2 apply plus_le_compat_r.
       apply plus_le_compat.
@@ -4311,24 +4331,24 @@ etransitivity. {
     apply plus_le_compat; trivial.
     apply le_n_S.
     apply mult_le_compat_l.
-    transitivity (nb_nodes p); trivial.
-    replace (length (activations p0)) with (A - 1); try (simpl; omega).
+    transitivity (#ℐᵃ⁺ᵖ p); trivial.
+    replace (length (ℐᵃ p0)) with (A - 1); try (simpl; omega).
     rewrite plus_assoc, mult_minus_distr_r, mult_1_l.
-    transitivity (A * (1 + activation_bound prog S)); try lia.
+    transitivity (A * (1 + 𝓡 prog S)); try lia.
     apply nb_nodes_bound_gen.
     exact H_wf_p.
 Qed.
 
 Theorem size_bound_gen : forall i s p' c1 t c2 v,
   let p := cbv_update i s p' c1 t c2 v in
-  let A := length (activations p) in
-  let S := max_active_size p in
+  let A := 𝓐 p in
+  let S := 𝓢 p in
   wf p ->
-  size p <=
-  (A * activation_bound prog S + A + 1 + (max_arity * A * (1 + activation_bound prog S))) *
-  (activation_bound prog S + S + cache_size c1 +
+  ∣p∣ <=
+  (A * 𝓡 prog S + A + 1 + (max_arity * A * (1 + 𝓡 prog S))) *
+  (𝓡 prog S + S + cache_size c1 +
   (1 + max S (maxl (map (fun tv : term * value => value_size (snd tv)) c1))) *
-  (1 + (A * activation_bound prog S + A) + max_arity * (A * activation_bound prog S + A))) +
+  (1 + (A * 𝓡 prog S + A) + max_arity * (A * 𝓡 prog S + A))) +
   cache_size c1.
 Proof.
 intros i s p0 c1 t c2 v p A S H_wf_p.
@@ -4354,14 +4374,14 @@ Qed.
 (* This corollary corresponds to Proposition 6. *)
 Corollary size_bound : forall i s p' t c v,
   let p := cbv_update i s p' [] t c v in
-  let A := length (activations p) in
-  let S := max_active_size p in
+  let A := 𝓐 p in
+  let S := 𝓢 p in
   wf p ->
-  size p <=
-  (A * activation_bound prog S + A + 1 + (max_arity * A * (1 + activation_bound prog S))) *
-  (activation_bound prog S + S +
+ ∣p∣ <=
+  (A * 𝓡 prog S + A + 1 + (max_arity * A * (1 + 𝓡 prog S))) *
+  (𝓡 prog S + S +
   (1 + S) *
-  (1 + (A * activation_bound prog S + A) + max_arity * (A * activation_bound prog S + A))).
+  (1 + (A * 𝓡 prog S + A) + max_arity * (A * 𝓡 prog S + A))).
 Proof.
 intros i s p0 t c v p A S H_wf_p.
 etransitivity. {

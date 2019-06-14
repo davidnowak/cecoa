@@ -1,3 +1,4 @@
+(** * Quasi-Interpretations *)
 Require Import Le Max List Bool Cecoa.Lib Cecoa.Syntax Cecoa.CBV_cache NPeano Omega Cecoa.OptionMonad.
 
 Section QI.
@@ -10,6 +11,7 @@ Notation pattern := (Syntax.pattern variable constructor).
 Notation rule := (Syntax.rule variable function constructor).
 Notation term_from_value := (Syntax.term_from_value variable function (constructor:=constructor)).
 Notation term_from_pattern := (Syntax.term_from_pattern (variable:=variable) function (constructor:=constructor)).
+Notation "'╎' t '╎'" := (@term_size variable function constructor t) (at level 10).
 Variable prog : list rule.
 Variable max_arity:nat.
 Variable rule_default : rule.
@@ -23,7 +25,7 @@ Notation cache_path := (CBV_cache.cache_path variable_eq_dec function_eq_dec con
 
 
 
-Notation cache_path_transitivity := 
+Notation cache_path_transitivity :=
            (@CBV_cache.cache_path_transitivity _ _ _ variable_eq_dec function_eq_dec constructor_eq_dec).
 Notation cache_path_transitivity_left :=
            (@CBV_cache.cache_path_transitivity_left _ _ _ variable_eq_dec function_eq_dec constructor_eq_dec).
@@ -31,7 +33,8 @@ Notation cbv := (CBV_cache.cbv variable function constructor).
 Notation wf := (CBV_cache.wf variable_eq_dec  function_eq_dec constructor_eq_dec rule_default
                 prog max_arity).
 
-(*Definition 11*)
+(** ** Assignments *)
+
 Definition assignment_constructor := constructor -> list nat -> nat.
 Definition assignment_function := function -> list nat -> nat.
 
@@ -43,7 +46,7 @@ Definition assignment_function := function -> list nat -> nat.
 Variable mcs: nat.
 
 Definition constructor_non_zero cs :=
-   forall c:constructor, cs  c > 0. 
+   forall c:constructor, cs  c > 0.
 
 Definition additive (qic:assignment_constructor) cs :=
    forall c:constructor, forall l, qic c l=(suml l)+(cs c).
@@ -68,8 +71,8 @@ Fixpoint value_assignment (qic:assignment_constructor) (v:value) {struct v}:=
   | c_capply c lv => qic c (map (value_assignment qic) lv)
    end.
 
-(*Lemma 67 borne inf *)
-Lemma value_size_le_QI qic cs: 
+(* Lower bound *)
+Lemma value_size_le_QI qic cs:
   additive qic cs -> constructor_non_zero cs ->
   forall v:value, value_size v <= value_assignment qic v.
 Proof.
@@ -78,7 +81,7 @@ unfold additive in additivity. unfold constructor_non_zero in non_zero.
 induction v using value_ind2.
 simpl.
 apply le_trans with (m:=suml (map (value_assignment qic) l)+1).
-- apply le_trans with (m:=S (suml (map (value_assignment qic) l)));try omega. (* j'ai du mal avec S/+1 *)
+- apply le_trans with (m:=S (suml (map (value_assignment qic) l)));try omega.
   rewrite <- Nat.succ_le_mono.
   apply suml_map_le;trivial.
 - rewrite additivity.
@@ -86,10 +89,10 @@ apply le_trans with (m:=suml (map (value_assignment qic) l)+1).
   apply (non_zero c).
 Qed.
 
-(*Lemma 67 borne sup *)
-Lemma QI_le_value_size qic cs: 
+(* Upper bound *)
+Lemma QI_le_value_size qic cs:
   additive qic cs -> mcs_is_max_constructor_size cs ->
-  forall v:value, 
+  forall v:value,
   value_assignment qic v <= mcs*(value_size v).
 Proof.
 intros additivity max_cs.
@@ -100,9 +103,8 @@ rewrite additivity.
 apply le_trans with (m:=suml (map (value_assignment qic) l)+mcs).
 - apply Plus.plus_le_compat_l.
   apply max_cs.
-- replace (S (suml (map (value_size (constructor:=constructor)) l))) 
+- replace (S (suml (map (value_size (constructor:=constructor)) l)))
           with ((suml (map (value_size (constructor:=constructor)) l)+1));try omega.
-  (* comment remplacer automatiquement S x par x+1 pour pouvoir appliquer la distributivité ? *)
   rewrite Mult.mult_plus_distr_l;rewrite Mult.mult_1_r;apply Plus.plus_le_compat_r.
   rewrite mult_suml_r;rewrite map_map.
   apply suml_map_le;trivial.
@@ -112,39 +114,35 @@ Qed.
 (*                  QI of function symbols / terms                                       *)
 (*****************************************************************************************)
 
-(* c'est cette forme qui est utilisée partout *)
+(** Subterm *)
 Definition subterm (qif:assignment_function) := forall f l x, In x l -> x <= qif f l.
 
-(*monotonicity*)
+(** Monotonicity *)
 Definition monotonicity_qif (qif:assignment_function) :=
   forall f lx ly, Forall2 le lx ly -> qif f lx <= qif f ly.
 
-
-
-(* assignment of a term*)
+(** Assignment of a term (Definition 41) *)
 Fixpoint term_assignment (qic:assignment_constructor) (qif:assignment_function)
 (t:term) {struct t}:=
    match t with
-  | var v=> 0 (* pas necessaire. Les QI sont toujours appliquées sur des termes clots. *)
+  | var v=> 0 (* QI are always applied on closed terms anyway *)
   | capply c lt => qic c (map (term_assignment qic qif) lt)
-  | fapply f lt=> qif f (map (term_assignment qic qif)  lt) 
+  | fapply f lt=> qif f (map (term_assignment qic qif)  lt)
  end.
 
 (*Definition 12*)
 Definition compatible_QI qic qif := forall f lp t, forall s:variable -> value,
   let ru := rule_intro f lp t in (* f(p1, ..., pn) -> t *)
-  (In ru prog) -> 
-  term_assignment qic qif (subst s t) <= term_assignment qic qif (subst s (lhs_of_rule ru)). 
-  (* pour toute substitution, QI(t) <= QI(f(p1, ..., pn)) *)
+  (In ru prog) ->
+  term_assignment qic qif (subst s t) <= term_assignment qic qif (subst s (lhs_of_rule ru)).
 
 Definition valid_QI qic qif cs :=
   (additive qic cs) /\ (mcs_is_max_constructor_size cs) /\ (constructor_non_zero cs) /\
   (subterm qif) /\ (monotonicity_qif qif) /\ (compatible_QI qic qif).
 
-Definition cache_bounded qic qif (c:cache): Prop  := 
+Definition cache_bounded qic qif (c:cache): Prop  :=
   Forall (fun t => value_assignment qic (snd t) <= term_assignment qic qif (fst t)) c.
 
-(* sous typage *)
 Lemma value_as_term_assignment qic qif: forall v:value,
   (term_assignment qic qif (term_from_value v)) = (value_assignment qic v).
 Proof.
@@ -160,19 +158,19 @@ Qed.
 (*                        starting real proofs                                           *)
 (*****************************************************************************************)
 
-(* Les 2 lemmes suivants sont utilisés 2 fois par la suite. *)
-Lemma qi_fapply_right_le_qi_fapply_left qic qif : forall proof_tree lp f c1,
+(* The following lemmas are used twice in the following *)
+Lemma qi_fapply_right_le_qi_fapply_left qic qif : forall π lp f c1,
   monotonicity_qif qif ->
   let l := map (proj_left (constructor:=constructor)) lp in
   let l' := map term_from_value (map (proj_right (constructor:=constructor)) lp) in
-  let c := cache_left proof_tree in let v := proj_right proof_tree in
-  (forall p, In p lp -> cache_bounded qic qif (cache_left p) -> 
-             value_assignment qic (proj_right p) <= term_assignment qic qif (proj_left p) /\ 
+  let c := cache_left π in let v := proj_right π in
+  (forall p, In p lp -> cache_bounded qic qif (cache_left p) ->
+             value_assignment qic (proj_right p) <= term_assignment qic qif (proj_left p) /\
              cache_bounded qic qif (cache_right p)) ->
-  cache_bounded qic qif c1 -> cache_path c1 c lp = true -> andl (map wf lp) -> 
+  cache_bounded qic qif c1 -> cache_path c1 c lp = true -> andl (map wf lp) ->
   (term_assignment qic qif (fapply f l')) <= (term_assignment qic qif (fapply f l)).
 Proof.
-intros proof_tree lp f c1 monotonicity l l' c v.
+intros π lp f c1 monotonicity l l' c v.
 intros lp_bound c1_bound c_path wf_lp.
 simpl.
 unfold monotonicity_qif in monotonicity.
@@ -187,39 +185,35 @@ apply cache_path_transitivity_left with (c:=c1) (c':=c) (l:=lp);auto.
 apply lp_bound.
 Qed.
 
-Lemma qi_right_le_qi_fapply_left qic qif: forall proof_tree lp f c1,
-  monotonicity_qif qif -> wf proof_tree ->
+Lemma qi_right_le_qi_fapply_left qic qif: forall π lp f c1,
+  monotonicity_qif qif -> wf π ->
   let l := map (proj_left (constructor:=constructor)) lp in
   let l' := map term_from_value (map (proj_right (constructor:=constructor)) lp) in
-  let c := cache_left proof_tree in let c' := cache_right proof_tree in
-  let v := proj_right proof_tree in
-  proj_left proof_tree = fapply f l' -> 
+  let c := cache_left π in let c' := cache_right π in
+  let v := proj_right π in
+  proj_left π = fapply f l' ->
   (forall p, In p lp -> cache_bounded qic qif (cache_left p) -> wf p ->
-             value_assignment qic (proj_right p) <= term_assignment qic qif (proj_left p) /\ 
+             value_assignment qic (proj_right p) <= term_assignment qic qif (proj_left p) /\
              cache_bounded qic qif (cache_right p)) ->
   (cache_bounded qic qif c -> value_assignment qic v <= term_assignment qic qif (fapply f l')) ->
   cache_bounded qic qif c1 -> cache_bounded qic qif c' -> cache_path c1 c lp = true ->
-    andl (map wf lp) -> 
+    andl (map wf lp) ->
   value_assignment qic v <= term_assignment qic qif (fapply f l).
 Proof.
-intros proof_tree lp f c1 monotonicity well_formed l l' c c' v.
+intros π lp f c1 monotonicity well_formed l l' c c' v.
 intros pl lp_bound val_bound c1_bound c'_bound c_path wf_lp.
 apply le_trans with (m:=term_assignment qic qif (fapply f l'));auto.
 - apply val_bound;auto.
   apply cache_path_transitivity with (c:=c1) (c':=c) (l:=lp);auto.
   intros;apply lp_bound;auto.
   apply andl_in_map with (l:=lp);auto.
-- apply qi_fapply_right_le_qi_fapply_left with (proof_tree:=proof_tree) (c1:=c1);try tauto.
+- apply qi_fapply_right_le_qi_fapply_left with (π:=π) (c1:=c1);try tauto.
   intros.
   apply lp_bound;try tauto.
   apply andl_in_map with (l:=lp);auto.
 Qed.
 
-(* Lemma 68 *)
-(* Lemme clé : pour chaque jugement de cache gauche borné,
-               * le cache droit est aussi borné.
-               * la QI de gauche est plus grande que la QI de droite
-*)
+(** Lemma 63 *)
 Lemma left_bound_to_right_bound qic qif cs:forall pi:cbv,
     valid_QI qic qif cs -> (wf pi) ->
     cache_bounded qic qif (cache_left pi) ->
@@ -232,15 +226,15 @@ destruct valid as (additivity & mcs_is_max & non_zero & sub & mono & compat).
 induction pi using cbv_ind2;
           unfold cache_left;unfold proj_right;unfold proj_left;unfold cache_right;
           intros well_formed cache.
-- (* cas cbv_constr *)
+- (* cbv_constr *)
   assert (cache_bounded qic qif c2).
-  + (* preuve du assert : borne sur le cache *)
+  + (* prove bound on cache *)
     simpl in well_formed;destruct t;destruct v;try tauto.
     destruct well_formed as (cpath & Hc & Hl & Hl0 & wf_list & arity).
     apply cache_path_transitivity with (c:=c1) (c':=c2) (l:=lp);auto.
     intros;apply H;auto.
     apply andl_in_map with (l:=lp);auto.
-  + (* borne sur les QI *)
+  + (* bound on QI *)
     split;auto.
     simpl in well_formed;destruct t;destruct v;try tauto.
     destruct well_formed as (cpath & Hc & Hl & Hl0 & wf_list & arity).
@@ -251,53 +245,52 @@ induction pi using cbv_ind2;
     apply Forall2_map.
     intros.
     apply H;auto.
-    * apply andl_in_map with (l:=lp);auto. 
+    * apply andl_in_map with (l:=lp);auto.
     * apply cache_path_transitivity_left with (c:=c1) (c':=c2) (l:=lp);auto.
       intros.
       apply H;auto.
       apply andl_in_map with (l:=lp);auto.
-- (* cas cbv_split *)
+- (* cbv_split *)
   destruct t;simpl in well_formed;destruct pi;destruct t;try tauto.
   + (* cbv_update *)
     assert (cache_bounded qic qif c2).
-    * (* preuve du assert *)
-      destruct well_formed as (Hc2 & cpath &  Hl & Hl0 & wf_list & Hf & Hv & well_formed & arity).
+    { destruct well_formed as (Hc2 & cpath &  Hl & Hl0 & wf_list & Hf & Hv & well_formed & arity).
       unfold cache_left in IHpi;unfold cache_right in IHpi.
       subst c2.
       apply IHpi;auto.
       apply cache_path_transitivity with (c:=c1) (c':=c) (l:=lp);auto.
       intros;apply H;auto.
       apply andl_in_map with (l:=lp);auto.
-    * (* borne sur les QI *)
-      split;auto.
-      destruct well_formed as (Hc2 & cpath &  Hl & Hl0 & wf_list & Hf & Hv & well_formed & arity).
-      unfold cache_left, cache_right, proj_left, proj_right in IHpi.
-      subst c2 l f0 v1.
-      set (proof_tree:=cbv_update n v0 pi c (fapply f l0) c0 v).
-      subst l0.
-      apply qi_right_le_qi_fapply_left with (proof_tree:=proof_tree) (c1:=c1);try tauto.
-      intros;apply H;trivial.
+    }
+    (* bound on QIs *)
+    split;auto.
+    destruct well_formed as (Hc2 & cpath &  Hl & Hl0 & wf_list & Hf & Hv & well_formed & arity).
+    unfold cache_left, cache_right, proj_left, proj_right in IHpi.
+    subst c2 l f0 v1.
+    set (π:=cbv_update n v0 pi c (fapply f l0) c0 v).
+    subst l0.
+    apply qi_right_le_qi_fapply_left with (π:=π) (c1:=c1);try tauto.
+    intros;apply H;trivial.
   + (* cbv_read *)
     assert (cache_bounded qic qif c2).
-    * (* preuve du assert *)
-      destruct well_formed as (Hc2 & cpath &  Hl & Hl0 & wf_list & Hf & Hv & well_formed & arity).
+    {  destruct well_formed as (Hc2 & cpath &  Hl & Hl0 & wf_list & Hf & Hv & well_formed & arity).
       subst c2.
       apply cache_path_transitivity with (c:=c1) (c':=c) (l:=lp);auto.
       intros;apply H;auto.
       apply andl_in_map with (l:=lp);auto.
-    * (* borne sur les QI *)
-      split;auto.
-      destruct well_formed as (Hc2 & cpath &  Hl & Hl0 & wf_list & Hf & Hv & well_formed & arity).
-      unfold cache_left in IHpi;unfold cache_right in IHpi.
-      subst c2 l f0 v0.
-      set (proof_tree:=cbv_read c (fapply f l0) v).
-      subst l0.
-      apply qi_right_le_qi_fapply_left with (proof_tree:=proof_tree) (c1:=c1);try tauto.
-      intros;apply H;trivial.
-- (* cas cbv_update *)
+    }
+    (* bound on QIs *)
+    split;auto.
+    destruct well_formed as (Hc2 & cpath &  Hl & Hl0 & wf_list & Hf & Hv & well_formed & arity).
+    unfold cache_left in IHpi;unfold cache_right in IHpi.
+    subst c2 l f0 v0.
+    set (π:=cbv_read c (fapply f l0) v).
+    subst l0.
+    apply qi_right_le_qi_fapply_left with (π:=π) (c1:=c1);try tauto.
+    intros;apply H;trivial.
+- (* cbv_update *)
   assert (value_assignment qic v <= term_assignment qic qif t).
-  + (* preuve du assert : borne sur les QI*)
-    revert well_formed.
+  { revert well_formed.
     elim t;simpl;try tauto.
     intros.
     destruct well_formed as (_ & lp & r & length & rule & Hl & pl & pr & cl & _ & _ & wf_pi & _).
@@ -307,7 +300,7 @@ induction pi using cbv_ind2;
     generalize (IHpi wf_pi cache).
     generalize (compat f lp r s).
     intros.
-    replace (qif f (map (term_assignment qic qif) l)) with 
+    replace (qif f (map (term_assignment qic qif) l)) with
 	    (term_assignment qic qif (subst s (lhs_of_rule (rule_intro f lp r)))).
     * apply le_trans with (m:=term_assignment qic qif (subst s r));try tauto.
       apply H.
@@ -321,18 +314,19 @@ induction pi using cbv_ind2;
       induction lp as [ | p lp IH];simpl;trivial.
       rewrite IH.
       f_equal;apply subst_psubst.
- + (* preuve de la borne sur le cache *)
-   split;auto.
-   simpl in well_formed.
-   destruct t;try tauto.
-   destruct well_formed as (_ & _ & _ & _  & _ & _ & _ & _ & cl & _ & new_cache & wf_pi & _).
-   subst c2.
-   unfold cache_bounded.
-   apply Forall_cons.
-   * unfold fst, snd;auto.
-   * apply IHpi;auto.
-     rewrite cl;auto.
-- (* cas cbv_read *)
+  }
+  (* prove bound on cache *)
+  split;auto.
+  simpl in well_formed.
+  destruct t;try tauto.
+  destruct well_formed as (_ & _ & _ & _  & _ & _ & _ & _ & cl & _ & new_cache & wf_pi & _).
+  subst c2.
+  unfold cache_bounded.
+  apply Forall_cons.
+  * unfold fst, snd;auto.
+  * apply IHpi;auto.
+    rewrite cl;auto.
+- (* cbv_read *)
   split;auto.
   simpl in well_formed;destruct t;try tauto.
   destruct well_formed as (c_hit & lv'& Hl).
@@ -345,34 +339,30 @@ Qed.
 
 (***********************************************************************************)
 (*                                                                                 *)
-(*             Bornes globales                                                     *)
+(*             Global bounds                                                       *)
 (*                                                                                 *)
 (***********************************************************************************)
 
-(* Lemma 69 *)
-Lemma QI_never_increase_global qic qif cs: forall pi proof_tree:cbv, 
-  valid_QI qic qif cs -> wf proof_tree -> 
-  cache_bounded qic qif (cache_left proof_tree) -> InCBV pi proof_tree -> 
-  term_assignment qic qif (proj_left pi) <= term_assignment qic qif (proj_left proof_tree).
+(* Lemma 64 *)
+Lemma QI_never_increase_global qic qif cs: forall pi π:cbv,
+  valid_QI qic qif cs -> wf π ->
+  cache_bounded qic qif (cache_left π) -> InCBV pi π ->
+  term_assignment qic qif (proj_left pi) <= term_assignment qic qif (proj_left π).
 Proof.
-intros pi proof_tree valid well_formed cache subtree.
+intros pi π valid well_formed cache subtree.
 unfold valid_QI in valid.
 destruct valid as (additivity & max_cs & non_zero & sub & mono & compat).
-(* On a parfois besoin de valid en entier (pour appliquer le lemme clé) et parfois de ses composants.
-   Détruire valid cause plein de "unfold valid_QI;tauto." à chaque application du lemme clé.
-   Est-ce qu'on peut dupliquer l'hypothèse pour pouvoir à la fois conserver l'ensemble
-   et les composants et se passer de ces unfold ?                                                   *)
-induction proof_tree using cbv_ind2.
+induction π using cbv_ind2.
 - (* cbv_constr *)
   simpl in subtree;destruct subtree as [equal | strict].
-  + (* égalité *)
+  + (* equality *)
     subst pi;trivial.
-  + (* liste de sous arbres *)
+  + (* list sub-trees *)
     simpl in well_formed.
     destruct t;destruct v;try tauto.
     destruct well_formed as (cpath & Hc & Hl & Hl0 & wf_list & arity).
     rewrite orl_map in strict.
-    destruct strict as (x & inlist & intree).    
+    destruct strict as (x & inlist & intree).
     apply le_trans with (m:=term_assignment qic qif (proj_left x)).
     * { apply H;trivial.
         - apply andl_in_map with (l:=lp);trivial.
@@ -388,17 +378,15 @@ induction proof_tree using cbv_ind2.
       apply in_map with (f:=fun x0 => term_assignment qic qif (proj_left x0));trivial.
 - (* cbv_split *)
   simpl in subtree;destruct subtree as [equal | [single | strict]].
-  + (* égalité *)
+  + (* equality *)
     subst pi;trivial.
-  + (* le sous arbre isolé *)
+  + (* sub-tree *)
     simpl in well_formed.
-    destruct proof_tree;destruct t0;destruct t;try tauto;intuition; 
-    (* cet intuition fait aussi du travail dans IHproof_tree *)
+    destruct π;destruct t0;destruct t;try tauto;intuition;
              subst f0 c2;try subst v1;try subst v0.
-    * (* cbv_update au dessus *)
-      { simpl;simpl in cache;simpl in H8.
-        simpl in single;destruct single as [equal | strict]. 
-        (* les deux cas sont identiques. Peut-on factoriser la preuve ? *)
+    * { simpl;simpl in cache;simpl in H8.
+        simpl in single;destruct single as [equal | strict].
+        (* identical cases *)
         - apply le_trans with (m:=qif f (map (term_assignment qic qif) l)).
           + apply H8;auto.
             apply cache_path_transitivity with (c:=c1) (c':=c) (l:=lp);trivial.
@@ -410,7 +398,7 @@ induction proof_tree using cbv_ind2.
             rewrite map_map;rewrite map_map;rewrite map_map.
             apply Forall2_map.
             intros.
-            apply le_trans with (m:=value_assignment qic (proj_right x)). (* coercion de type *)
+            apply le_trans with (m:=value_assignment qic (proj_right x)). (* type coercion *)
             * apply Nat.eq_le_incl.
               apply value_as_term_assignment.
             * apply (left_bound_to_right_bound qic qif cs);trivial.
@@ -442,7 +430,7 @@ induction proof_tree using cbv_ind2.
               unfold valid_QI;tauto.
               apply andl_in_map with (l:=lp);trivial.
       }
-    * (* cbv_read au dessus *)
+    * (* cbv_read above *)
       simpl in cache;simpl in single;simpl in H8.
       destruct single as [equal | false];try tauto.
       subst pi;simpl in *.
@@ -451,7 +439,7 @@ induction proof_tree using cbv_ind2.
       rewrite map_map;rewrite map_map;rewrite map_map.
       apply Forall2_map.
       intros.
-      { apply le_trans with (m:=value_assignment qic (proj_right x)).  (* coercion de type *)
+      { apply le_trans with (m:=value_assignment qic (proj_right x)).  (* type coercion *)
         - apply Nat.eq_le_incl.
           apply value_as_term_assignment.
         - apply (left_bound_to_right_bound qic qif cs);trivial.
@@ -462,13 +450,12 @@ induction proof_tree using cbv_ind2.
             * unfold valid_QI;tauto.
             * apply andl_in_map with (l:=lp);trivial.
       }
-  + (* liste de sous arbres *)
+  + (* lists all sub-trees *)
     simpl in well_formed.
-    destruct proof_tree;destruct t0;destruct t;try tauto;intuition;
-    (* cet intuition fait aussi du travail dans IHproof_tree *)
+    destruct π;destruct t0;destruct t;try tauto;intuition;
              simpl;simpl in H9;simpl in cache;subst c2 f0;try subst v1;try subst v0.
-    (* les deux cas sont identiques, peut-on factoriser ? *)
-    * (* cbv_update au dessus *)
+    (* identical cases *)
+    * (* cbv_update above *)
       { rewrite orl_map in strict.
         destruct strict as (x & inlist & intree).
         apply le_trans with (m:=term_assignment qic qif (proj_left x)).
@@ -482,7 +469,7 @@ induction proof_tree using cbv_ind2.
           apply sub.
           apply in_map with (f:=fun x0 => term_assignment qic qif (proj_left x0));trivial.
       }
-    * (* cbv_read au dessus *)
+    * (* cbv_read above *)
       { rewrite orl_map in strict.
         destruct strict as (x & inlist & intree).
         apply le_trans with (m:=term_assignment qic qif (proj_left x)).
@@ -499,14 +486,14 @@ induction proof_tree using cbv_ind2.
 - (* cbv_update *)
   simpl;simpl in cache.
   simpl in subtree;destruct subtree as [equal | strict].
-  + (* égalité *)
+  + (* equality *)
     subst pi;trivial.
-  + (* sous arbre *)
+  + (* sub-tree *)
     simpl in well_formed.
     destruct t;try tauto.
     destruct well_formed as (_ & lp & t & n_le_lp & rule & Hl & pl & pr & cl & _ & _ & wf_ind & _).
-    apply le_trans with (m:=term_assignment qic qif (proj_left proof_tree)).
-    * subst c1;apply IHproof_tree;trivial.
+    apply le_trans with (m:=term_assignment qic qif (proj_left π)).
+    * subst c1;apply IHπ;trivial.
     * rewrite pl.
       simpl;unfold compatible_QI in compat.
       { replace l with (map (subst s) (map term_from_pattern lp)).
@@ -522,18 +509,18 @@ induction proof_tree using cbv_ind2.
   subst pi;trivial.
 Qed.
 
-Lemma cache_left_bounded_global qic qif cs: forall pi proof_tree:cbv,
-  valid_QI qic qif cs -> wf proof_tree -> 
-  cache_bounded qic qif (cache_left proof_tree) -> InCBV pi proof_tree ->
+Lemma cache_left_bounded_global qic qif cs: forall pi π:cbv,
+  valid_QI qic qif cs -> wf π ->
+  cache_bounded qic qif (cache_left π) -> InCBV pi π ->
   cache_bounded qic qif (cache_left pi).
 Proof.
-intros pi proof_tree valid well_formed cache subtree.
-induction proof_tree using cbv_ind2.
+intros pi π valid well_formed cache subtree.
+induction π using cbv_ind2.
 - (* cbv_constr *)
   simpl in subtree;destruct subtree as [ equal | strict].
-  + (* égalité *)
+  + (* equality *)
     subst pi;trivial.
-  + (* liste de sous arbres *)
+  + (* list sub-trees *)
     simpl in well_formed.
     destruct t;destruct v;try tauto.
     destruct well_formed as (cpath & Hc & Hl & Hl0 & wf_list & arity).
@@ -546,30 +533,28 @@ induction proof_tree using cbv_ind2.
       apply andl_in_map with (l:=lp);trivial.
 - (* cbv_split *)
   simpl in subtree;destruct subtree as [equal | [single | strict]].
-  + (* égalité *)
+  + (* equality *)
     subst pi;trivial.
-  + (* le sous arbre isolé *)
+  + (* sub-tree *)
     simpl in well_formed.
-    destruct proof_tree;destruct t0;destruct t;try tauto;intuition;simpl in cache.
-    (* cet intuition fait aussi du travail dans IHproof_tree *)
-    * (* cbv_update au dessus *)
+    destruct π;destruct t0;destruct t;try tauto;intuition;simpl in cache.
+    * (* cbv_update above *)
       apply H8;auto.
       simpl.
       apply cache_path_transitivity with (c:=c1) (l:=lp);auto.
       intros;apply (left_bound_to_right_bound qic qif cs);trivial.
       apply andl_in_map with (l:=lp);trivial.
-    * (* cbv_read au dessus *)
+    * (* cbv_read above *)
       simpl in single;destruct single as [equal | impossible];try tauto.
       subst pi;simpl.
       apply cache_path_transitivity with (c:=c1) (c':=c) (l:=lp);auto.
       intros;apply (left_bound_to_right_bound qic qif cs);trivial.
       apply andl_in_map with (l:=lp);trivial.
-  + (* liste de sous arbres *)
+  + (* list sub-trees *)
     simpl in well_formed.
-    destruct proof_tree;destruct t0;destruct t;try tauto;intuition.
-    (* cet intuition fait aussi du travail dans IHproof_tree *)
-    (* les deux cas sont identiques, peut-on factoriser ? *)
-    * (* cbv_update au dessus *)
+    destruct π;destruct t0;destruct t;try tauto;intuition.
+    (* identical sub-cases *)
+    * (* cbv_update above *)
       { rewrite orl_map in strict.
         destruct strict as (x & inlist & intree).
         apply H with (p:=x);auto.
@@ -578,7 +563,7 @@ induction proof_tree using cbv_ind2.
           intros;apply (left_bound_to_right_bound qic qif cs);trivial.
           apply andl_in_map with (l:=lp);trivial.
       }
-    * (* cbv_read au dessus *)
+    * (* cbv_read above *)
       { rewrite orl_map in strict.
         destruct strict as (x & inlist & intree).
         apply H with (p:=x);auto.
@@ -595,23 +580,20 @@ induction proof_tree using cbv_ind2.
   simpl in subtree.
   destruct subtree as [equal | strict].
   + subst pi;simpl;tauto.
-  + apply IHproof_tree;auto.
-    rewrite cl;trivial.   
+  + apply IHπ;auto.
+    rewrite cl;trivial.
 - (* cbv_read *)
   simpl in subtree.
   destruct subtree as [equal | impossible];try tauto.
   subst pi;simpl;trivial.
 Qed.
 
-Definition judgsize (p:cbv) := term_size (proj_left p) + value_size (proj_right p).
+Definition judgsize (p:cbv) := ╎proj_left p╎ + value_size (proj_right p).
 
-(* remarque préliminaire du Théorème 70 *)
 Lemma qi_active_bounded_by_size qic qif cs: forall f lval lt,
   valid_QI qic qif cs ->
   let t :=  (fapply f lt) in
-  let l := (map (fun x=> mcs * (term_size t)) lt) in
-  (* lt devrait aussi être défini par un let … in, mais ça plante à l'application du lemme et
-     je ne comprends pas pourquoi. *)
+  let l := (map (fun x=> mcs * ╎t╎) lt) in
   lt = map term_from_value lval ->
   term_assignment qic qif t <= (qif f l).
 Proof.
@@ -619,7 +601,7 @@ intros f lval lt valid.
 unfold valid_QI in valid.
 destruct valid as (additivity & max_cs & non_zero & sub & mono & compat).
 intros.
-apply le_trans with (m:=qif f (map (fun v => mcs*(term_size v)) lt)).
+apply le_trans with (m:=qif f (map (fun v => mcs * ╎v╎) lt)).
 apply le_trans with (m:=qif f (map (term_assignment qic qif) lt)).
 - simpl;auto.
 - apply mono.
@@ -632,7 +614,7 @@ apply le_trans with (m:=qif f (map (term_assignment qic qif) lt)).
   apply (QI_le_value_size qic cs);trivial.
 - unfold l.
   apply mono.
-  
+
   apply Forall2_map.
   intros.
   apply Mult.mult_le_compat_l.
@@ -642,26 +624,24 @@ apply le_trans with (m:=qif f (map (term_assignment qic qif) lt)).
   + apply maxl_is_max.
     apply in_map;trivial.
   + apply maxl_le_suml.
-  + omega. 
+  + omega.
 Qed.
 
-(* Théorème 70 *)
+(** Theorem 8 *)
 Lemma active_size_bound qic qif cs: forall i sub p c f lv d v, forall pi,
   valid_QI qic qif cs ->
   let t :=  (fapply f lv) in
-  let proof_tree := cbv_update i sub p c t d v in 
-  let l:= (map (fun x=> mcs * (term_size t)) lv) in
-  wf proof_tree -> In pi (activations proof_tree) -> cache_bounded qic qif c -> 
+  let π := cbv_update i sub p c t d v in
+  let l:= (map (fun x=> mcs * ╎t╎) lv) in
+  wf π -> In pi (ℐᵃ π) -> cache_bounded qic qif c ->
   judgsize pi <= (max_arity + 1) * (qif f l) + 1.
 Proof.
-intros i sub p c f lv d v pi valid t proof_tree l well_formed active cache.
+intros i sub p c f lv d v pi valid t π l well_formed active cache.
 unfold valid_QI in valid;destruct valid as (additivity & max_cs & non_zero & subt & mono & compat).
-(* pour ajouter les hypothèses explicitement *)
-assert (InCBV pi proof_tree) as subtree.
-apply activations_inCBV;trivial.
+assert (InCBV pi π) as subtree.
+apply ℐᵃ_inCBV;trivial.
 assert (wf pi) as sub_wf.
-apply wf_InCBV_wf with (proof_tree:=proof_tree);trivial.
-(* maintenant, on peut détruire active pour forcer la forme de pi *)
+apply wf_InCBV_wf with (π:=π);trivial.
 apply activation_is_function in active.
 destruct active as (i' & sub' & p' & c1 & t0 & c2 & v0 & pi_is_upd).
 destruct pi;try discriminate pi_is_upd.
@@ -670,26 +650,24 @@ simpl in sub_wf;destruct t1;try tauto.
 destruct sub_wf as (_ & lp & _ & _ & _ & Hl0 & _ & _ & _ & _ & _ & _ & arity).
 set (s:=fapply f0 l0);set (u:=v2).
 
-(* On empile les inégalités *)
-apply le_trans with (m:=(max_arity+1) * (term_assignment qic qif (fapply f lv)) + 1).
-apply le_trans with (m:=(max_arity+1)*(term_assignment qic qif s) + 1).
-apply le_trans with (m:=(length l0)*(term_assignment qic qif s) + (term_assignment qic qif s) + 1).
-apply le_trans with (m:=suml (map (fun t => term_assignment qic qif s) l0) + (term_assignment qic qif s) + 1).
-apply le_trans with (m:=suml (map (term_assignment qic qif) l0) + (term_assignment qic qif s) + 1).
-apply le_trans with (m:=suml (map (@term_size _ _ _) l0) + (term_assignment qic qif s) + 1).
-apply le_trans with (m:=(term_size s) + (term_assignment qic qif s)).
-apply le_trans with (m:=(term_size s) + (value_assignment qic u)).
-apply le_trans with (m:=(term_size s) + (value_size u)).
+apply le_trans with (m:= (max_arity+1) * (term_assignment qic qif (fapply f lv)) + 1).
+apply le_trans with (m:= (max_arity+1)*(term_assignment qic qif s) + 1).
+apply le_trans with (m:= (length l0)*(term_assignment qic qif s) + (term_assignment qic qif s) + 1).
+apply le_trans with (m:= suml (map (fun t => term_assignment qic qif s) l0) + (term_assignment qic qif s) + 1).
+apply le_trans with (m:= suml (map (term_assignment qic qif) l0) + (term_assignment qic qif s) + 1).
+apply le_trans with (m:= suml (map (@term_size _ _ _) l0) + (term_assignment qic qif s) + 1).
+apply le_trans with (m:= ╎s╎ + (term_assignment qic qif s)).
+apply le_trans with (m:= ╎s╎ + (value_assignment qic u)).
+apply le_trans with (m:= ╎s╎ + (value_size u)).
 
-(* Et on les dépile *)
 - auto.
 - apply Plus.plus_le_compat_l.
   apply (value_size_le_QI qic cs);auto.
 - apply Plus.plus_le_compat_l.
-  apply (left_bound_to_right_bound qic qif cs) with (pi:=cbv_update n v1 pi c0 s c3 u);trivial. (* lemme clé *)
+  apply (left_bound_to_right_bound qic qif cs) with (pi:=cbv_update n v1 pi c0 s c3 u);trivial.
   + unfold valid_QI;tauto.
-  + apply wf_InCBV_wf with (proof_tree:=proof_tree);trivial.
-  + apply (cache_left_bounded_global qic qif cs) with (proof_tree:=proof_tree);auto.
+  + apply wf_InCBV_wf with (π:=π);trivial.
+  + apply (cache_left_bounded_global qic qif cs) with (π:=π);auto.
     unfold valid_QI;tauto.
 - simpl;omega.
 - apply Plus.plus_le_compat_r;apply Plus.plus_le_compat_r.
@@ -714,11 +692,11 @@ apply le_trans with (m:=(term_size s) + (value_size u)).
   rewrite Mult.mult_1_l.
   apply Plus.plus_le_compat_r;apply Mult.mult_le_compat_r;trivial.
 - apply Plus.plus_le_compat_r;apply Mult.mult_le_compat_l.
-  apply (QI_never_increase_global qic qif cs) with 
-        (pi:=cbv_update n v1 pi c0 s c3 u) (proof_tree:=proof_tree);auto.
+  apply (QI_never_increase_global qic qif cs) with
+        (pi:=cbv_update n v1 pi c0 s c3 u) (π:=π);auto.
   unfold valid_QI;tauto.
 - apply Plus.plus_le_compat_r;apply Mult.mult_le_compat_l.
-  unfold proof_tree in *;clear proof_tree.
+  unfold π in *;clear π.
   unfold t in *;clear t.
   simpl in well_formed.
   destruct well_formed as (_ & lp0 & t' & _ & _ & Hlv & _ & _ & _ & _ & _ & wfp & _).
@@ -729,10 +707,10 @@ Qed.
 Lemma active_size_bound_max qic qif cs: forall i s p c f lv d v,
   valid_QI qic qif cs ->
   let t :=  (fapply f lv) in
-  let pi := cbv_update i s p c t d v in 
-  let la := (activations pi)  in
-  let l:= (map (fun x=> mcs * (term_size t)) lv) in
-  wf pi -> cache_bounded qic qif c -> forall la', incl la' la -> 
+  let pi := cbv_update i s p c t d v in
+  let la := (ℐᵃ pi)  in
+  let l:= (map (fun x=> mcs * ╎t╎) lv) in
+  wf pi -> cache_bounded qic qif c -> forall la', incl la' la ->
   maxl (map judgsize la') <= (max_arity + 1) * qif f l + 1.
 Proof.
 intros i s p c f lv d v valid t pi la l Hwf Hcb la' Hsslist.
@@ -745,58 +723,56 @@ induction la';simpl.
     apply tl_incl with (a:=a);trivial.
 Qed.
 
-Lemma max_active_size_sublist: forall c c' lp lp',
+Lemma 𝓢_sublist: forall c c' lp lp',
   andl (map wf lp) -> cache_path c c' lp = true -> incl lp' lp ->
   (forall p : cbv, In p lp -> wf p ->
-   max_active_size p <= maxl (map judgsize (activations p))) ->
-   maxl (map (@max_active_size _ _ _) lp') <= 
-   maxl (map judgsize (flat_map (activations (constructor:=constructor)) lp')).
+   𝓢 p <= maxl (map judgsize (ℐᵃ p))) ->
+   maxl (map (@𝓢 _ _ _) lp') <=
+   maxl (map judgsize (flat_map (ℐᵃ (constructor:=constructor)) lp')).
 Proof.
 induction lp'.
-- (* induction : nil *)
-  simpl;intros;auto. 
-- (* induction : cons *)
+- (* induction: nil *)
+  simpl;intros;auto.
+- (* induction: cons *)
   intros.
   simpl.
   rewrite map_app.
   rewrite maxl_app.
   apply Nat.max_le_compat.
-  + (* cas gauche du max_le_compat *)
+  + (* left case of max_le_compat *)
     apply (H2 a).
     unfold incl in H1;apply H1;simpl;auto.
     apply andl_in_map with (l:=lp);auto.
     unfold incl in H1;apply (H1 a);simpl;auto.
-  + (* cas droite du max_le_compat *)
+  + (* right case of max_le_compat *)
     apply IHlp';intros;auto.
     apply tl_incl with (a:=a);trivial.
 Qed.
 
-Lemma max_active_size_is_max: forall pi,
-   let S := max_active_size pi in
-   wf pi -> S <= maxl (map judgsize (activations pi)).
+Lemma 𝓢_is_max: forall pi,
+   let S := 𝓢 pi in
+   wf pi -> S <= maxl (map judgsize (ℐᵃ pi)).
 Proof.
 induction pi using cbv_ind2;intros;auto.
-- (* cas cbv_constr *)
-  unfold S;simpl.  
+- (* cbv_constr *)
+  unfold S;simpl.
   simpl in H0;destruct t;destruct v;try tauto.
   destruct H0 as (cpath & Hc & HGl & Hl0 & wf_list & arity).
-  apply max_active_size_sublist with (c:=c1) (c':=c2) (lp:=lp);auto.
+  apply 𝓢_sublist with (c:=c1) (c':=c2) (lp:=lp);auto.
   apply incl_refl.
-- (* cas cbv_split *)
+- (* cbv_split *)
   unfold S;simpl.
   rewrite map_app.
-  rewrite maxl_app.  
+  rewrite maxl_app.
   apply Nat.max_le_compat.
-  + (* le sous arbre isolé *)
-    apply IHpi.
+  + apply IHpi.
     simpl in H0.
     destruct pi;destruct t0;destruct t;tauto.
-  + (* la liste de sous-arbres *)
-    simpl in H0;destruct pi;destruct t0;destruct t;try tauto;
+  + simpl in H0;destruct pi;destruct t0;destruct t;try tauto;
           destruct H0 as (Hc & cpath & Hl0 & Hl & wf_list & Hf & Hv & wfp & arity);
-          apply max_active_size_sublist with (c:=c1) (c':=c) (lp:=lp);auto;apply incl_refl.
-- (* cas cbv_update *)
-  simpl activations.
+          apply 𝓢_sublist with (c:=c1) (c':=c) (lp:=lp);auto;apply incl_refl.
+- (* cbv_update *)
+  simpl ℐᵃ.
   rewrite map_cons.
   simpl maxl.
   simpl in S.
@@ -807,19 +783,19 @@ induction pi using cbv_ind2;intros;auto.
   destruct H as (_ & _ & _ & _ & _ & _ & _ & _ & _ & _ & _ & H & _);trivial.
 Qed.
 
-Theorem max_active_size_bound qic qif cs: forall i s p c f lv d v,
+Theorem 𝓢_bound qic qif cs: forall i s p c f lv d v,
   valid_QI qic qif cs ->
   let t :=  (fapply f lv) in
-  let pi := cbv_update i s p c t d v in 
-  let l:= (map (fun x=> mcs * (term_size t)) lv) in
-  let S := max_active_size pi in
-  wf pi -> cache_bounded qic qif c -> S <= (max_arity + 1) * (qif f l) + 1.
+  let π := cbv_update i s p c t d v in
+  let l:= (map (fun x=> mcs * ╎t╎) lv) in
+  let S := 𝓢 π in
+  wf π -> cache_bounded qic qif c -> S <= (max_arity + 1) * (qif f l) + 1.
 Proof.
 intros i s p c f lv d v valid;intros.
-generalize (max_active_size_is_max pi H).
-unfold S, pi,t.
+generalize (𝓢_is_max π H).
+unfold S, π,t.
 intros.
-apply le_trans with (m:=maxl (map judgsize (activations pi)));auto.
+apply le_trans with (m:=maxl (map judgsize (ℐᵃ π)));auto.
 apply (active_size_bound_max qic qif cs i s p c f lv d v);auto.
 apply incl_refl.
 Qed.
@@ -832,13 +808,13 @@ Definition p_assignment_function := function -> option(list nat -> nat).
 Fixpoint p_term_assignment (qic:assignment_constructor) (qif:p_assignment_function)
 (t:term) {struct t} : option nat:=
    match t with
-  | var v=> Some 0 (* pas necessaire. Les QI sont toujours appliquées sur des termes clots. *)
+  | var v=> Some 0 (* QI are always applied on closed terms anyway *)
   | capply c lt => option_map (qic c) (option_list_map(map (p_term_assignment qic qif) lt))
   | fapply f lt=> option_bind (fun g => option_map g (option_list_map(map (p_term_assignment qic qif)  lt)))
                               (qif f)
 end.
 
-Definition complete_p_QI (qif : p_assignment_function) f := 
+Definition complete_p_QI (qif : p_assignment_function) f :=
   complete_option maxl (qif f).
 
 Lemma p_term_assignment_term_assignment qic qif t v:
@@ -894,8 +870,8 @@ Qed.
 
 Definition p_compatible_QI qic qif:= forall f lp t, forall s:variable -> value,
   let ru := rule_intro f lp t in
-  (In ru prog) -> 
-    p_term_assignment qic qif (subst s t) ≤p 
+  (In ru prog) ->
+    p_term_assignment qic qif (subst s t) ≤p
     p_term_assignment qic qif (subst s (lhs_of_rule ru)).
 
 Lemma p_compatible_compatible qic:
@@ -911,7 +887,7 @@ apply p_term_assignment_term_assignment in Hv2.
 now subst.
 Qed.
 
-Lemma p_term_assignment_ext qic f f': 
+Lemma p_term_assignment_ext qic f f':
  (forall x, f x = f' x) ->
  forall t, p_term_assignment qic f t= p_term_assignment qic f' t.
 Proof.
@@ -925,7 +901,7 @@ induction t using term_ind2.
   simpl; f_equal; f_equal; now apply map_ext_in.
 Qed.
 
-Lemma p_compatible_QI_ext qic f f': 
+Lemma p_compatible_QI_ext qic f f':
  (forall x, f x = f' x) ->
  p_compatible_QI qic f ->
  p_compatible_QI qic f'.
@@ -989,7 +965,7 @@ induction v using value_ind2.
 simpl.
 unfold option_map, option_list_map.
 rewrite map_map.
-rewrite option_list_map_map with 
+rewrite option_list_map_map with
   (f := fun x => match x with Some v => v | None => 0 end).
 - do 2 f_equal; rewrite map_map; apply map_ext_in.
   intros; rewrite H; trivial.
@@ -1002,16 +978,16 @@ Qed.
 
 Definition p_subterm (qif : p_assignment_function) : Prop :=
 forall (f : function) (l : list nat) (x : nat), x ∈ l ->
-  match qif f with 
-  | None => True 
+  match qif f with
+  | None => True
   | Some f0 => (x <= f0 l)
   end.
 
 Definition p_monotonicity (qif : p_assignment_function) : Prop :=
   forall (f : function) (lx ly : list nat),
-    Forall2 le lx ly -> 
-    match qif f with 
-    | None => True 
+    Forall2 le lx ly ->
+    match qif f with
+    | None => True
     | Some f0 => f0 lx <= f0 ly
     end.
 
@@ -1033,10 +1009,10 @@ repeat split; intros f0 l x Hin.
 Qed.
 
 Lemma p_smc_smc qic :
-  {pqif | p_smc qic ((fun _ => None);; pqif)} -> 
+  {pqif | p_smc qic ((fun _ => None);; pqif)} ->
   {qif | subterm qif /\ monotonicity_qif qif /\ compatible_QI qic qif}.
 Proof.
-unfold p_smc, compatible_QI, p_compatible_QI, p_subterm, subterm, 
+unfold p_smc, compatible_QI, p_compatible_QI, p_subterm, subterm,
        monotonicity_qif, p_monotonicity.
 intros (qif & Hs & Hm & Hc); exists (complete_p_QI qif).
 repeat split.

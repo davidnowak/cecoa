@@ -4,7 +4,7 @@ Require Cecoa.Syntax Cecoa.Program Cecoa.CBV_cache Cecoa.Ordering Cecoa.QI Cecoa
 Module Type SYNTAX.
   Parameters variable function constructor : Type.
 
-  (* Default values, for error cases *)
+  (** Default values, for error cases *)
   Parameter function_default : function.
   Parameter constructor_default : constructor.
 

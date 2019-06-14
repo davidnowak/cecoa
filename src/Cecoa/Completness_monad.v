@@ -51,19 +51,19 @@ Definition Mbind {A B:Type} (m:monad A) f :=
   (λ st, let (st',x) := Meval m st in
          let m' := f x in Meval m' st'):monad B.
 Infix ">>=" := Mbind (at level 15, left associativity) : monad_scope. (* level at random… *)
-Open Scope monad_scope. (* peut-on ouvrir le scope au début de la section (avant d’y mettre des trucs ?) *)
+Open Scope monad_scope.
 Lemma le_lt_Mbind_lt {A B:Type} (ma:monad A) (f:A → monad B):
   Mle ma → (∀ a, Mlt (f a)) → Mlt (ma >>= f).
 Proof.
 unfold Mbind, Mle, Mlt, Meval. intros.
-rewrite (surjective_pairing (ma st)). (* pour se débarasser du let in *)
+rewrite (surjective_pairing (ma st)).
 apply Nat.le_lt_trans with (m:= fst (ma st)); trivial.
 Qed.
 Lemma lt_le_Mbind_lt {A B:Type} (ma:monad A) (f:A → monad B):
   Mlt ma → (∀ a, Mle (f a)) → Mlt (ma >>= f).
 Proof.
 unfold Mbind, Mle, Mlt, Meval. intros.
-rewrite (surjective_pairing (ma st)). (* pour se débarasser du let in *)
+rewrite (surjective_pairing (ma st)).
 apply Nat.lt_le_trans with (m:= fst (ma st)); trivial.
 Qed.
 Lemma eq_eq_Mbind_eq {A B:Type} (ma:monad A) (f:A → monad B):
@@ -989,7 +989,7 @@ Definition lhs_func (r:rule):= (* => Syntax.v ? *)
   | rule_intro f _ _ => f
   end.
 Definition all_lhs_funcs x := map lhs_func (rules x).
-Lemma lhs_funcs_eq x: (* pour pouvoir faire des fold et pas que des unfold… *)
+Lemma lhs_funcs_eq x: (* useful to fold… *)
   map lhs_func (rules x) = all_lhs_funcs x.
 Proof. auto. Qed.
 
@@ -1015,7 +1015,7 @@ Definition rhs_funcs ru :=  (* => Syntax.v ? *)
   | rule_intro _ _ t => functions_of_term t
   end.
 Definition all_rhs_funcs prg := flat_map rhs_funcs prg.
-Lemma rhs_funcs_eq prg: (* pour pouvoir faire des fold et pas que des unfold *)
+Lemma rhs_funcs_eq prg: (* useful to fold… *)
   flat_map rhs_funcs prg = all_rhs_funcs prg.
 Proof. auto. Qed.
 

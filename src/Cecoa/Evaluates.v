@@ -307,7 +307,7 @@ Proof.
   induction p as [ x | c lp IH ] using pattern_ind2;
     intros s s' v Huni.
 
-  - (* cas variable : unify va forcer s' à contenir x *)
+  - (* variable: unify ensures x appears in s' *)
     intros x' [ Hx' | H ]; [ | tauto ]; subst x'.
     rewrite unify_equation in Huni.
     case_eq (assoc (variable_beq variable_eq_dec) x s).
@@ -575,7 +575,7 @@ Proof.
       subst s' t f0 i.
       exists (lp0, t0).
       repeat split; [ apply lt_O_Sn | assumption ].
-    + (* ici on dispose d’une hypothèse unify_list = None *)
+    + (* we know unify_list = None *)
       intros Hnone Hrec.
       case_eq (first_rule_rec prog' (f,lv)); [ | intros H; rewrite H in Hrec; discriminate Hrec ].
       intros [ [i' s'] t'] Heq.
