@@ -1,5 +1,5 @@
-LIBDIR      := src/Cecoa
-EXAMPLESDIR := src/Cecoa/Examples
+LIBDIR      := src/Cecoa src/Cecoa/Rationals
+EXAMPLESDIR := src/Cecoa/Examples src/Cecoa/Rationals/Examples
 
 SOURCES := $(foreach dir, $(LIBDIR) $(EXAMPLESDIR), $(wildcard $(dir)/*.v))
 
