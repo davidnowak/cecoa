@@ -30,7 +30,7 @@ It consists of:
 
 ### By hand
 
-Cecoa builds with Coq between (at least) v8.6.0 and v8.8.1.
+Cecoa builds with Coq between (at least) v8.6.0 and v8.9.1.
 
 It requires the Coq library
 [BellantoniCook](https://github.com/davidnowak/bellantonicook)
@@ -58,9 +58,16 @@ opam install coq-cecoa
 
 ##  Contents
 
-The `src/Cecoa` directory contains our library, in particular the
-`Interface.v` provided to use its results easily.
+The `src/Cecoa` directory contains two versions of our library: one
+in which Quasi-Interpretations are polynomials on natural numbers and
+one on rationals.
+That second version is in the `src/Cecoa/Rationals/` sub-directory.
+Using rationals can simplify the quasi-interpretations but, in our
+tests, the performance of proof-checking is much better for natural
+numbers. This is why this library combines the two.
 
-The `src/Cecoa/Examples/` directory contains a few examples of
-programs, the proofs that they admit a quasi-interpretation and so
-that they are polytime.
+Both versions provide an `Interface.v` to use their results easily.
+
+The `src/Cecoa/Examples/` and `src/Cecoa/Rationals/Examples/`
+directories contain a few examples of programs, the proofs that they
+admit a quasi-interpretation and so that they are polytime.
