@@ -24,7 +24,7 @@ remove: [
 ]
 depends: [
   "ocaml"
-  "coq" {>= "8.6.0" & < "8.9.0~"}
+  "coq" {>= "8.6.0" & < "8.10.0~"}
   "coq-bellantonicook"
 ]
 tags: [
@@ -33,7 +33,7 @@ tags: [
   "keyword:polynomial time"
   "keyword:rewriting"
   "logpath:Cecoa"
-  "date:2018-09-10"
+  "date:2019-07-05"
 ]
 synopsis:
   "Implicit-complexity Coq library to prove that some programs are computable in polynomial time"
